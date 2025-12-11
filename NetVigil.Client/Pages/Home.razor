@@ -1,0 +1,163 @@
+﻿@page "/"
+@using NetVigil.Shared
+@inject HttpClient Http
+@implements IDisposable
+
+<PageTitle>NetVigil - Overview</PageTitle>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+    <div>
+        <h2 style="margin: 0; font-weight: 700;">Network Overview</h2>
+        <div style="color: var(--text-secondary); font-size: 0.9rem;">Real-time monitoring active</div>
+    </div>
+    <button class="btn-primary" @onclick="RefreshData">
+        @if (isRefreshing)
+        {
+            <span style="animation: spin 1s linear infinite; display:inline-block;">↻</span> <span>Scanning...</span>
+        }
+        else
+        {
+            <span>↻ Refresh Data</span>
+        }
+    </button>
+</div>
+
+@if (stats == null)
+{
+    <div style="text-align:center; padding: 50px; color: var(--text-secondary);">
+        <div style="font-size: 2rem; margin-bottom: 10px;">📡</div>
+        Connecting to Agents...
+    </div>
+}
+else
+{
+    <!-- Stats Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin-bottom: 30px;">
+        <div class="card">
+            <div class="stat-label">Online Devices</div>
+            <div class="stat-value">@stats.OnlineDevices <span style="font-size:1.2rem; color:var(--text-secondary); font-weight:400;">/ @stats.TotalDevices</span></div>
+        </div>
+        <div class="card">
+            <div class="stat-label">Total Traffic (In)</div>
+            <div class="stat-value">@stats.TotalTrafficIn <span style="font-size:1rem; font-weight:400;">Mbps</span></div>
+            <div style="height: 4px; width: 100%; background: #334155; margin-top: 10px; border-radius: 2px;">
+                <div style="height: 100%; width: 60%; background: var(--accent-green); border-radius: 2px;"></div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="stat-label">Security Alerts</div>
+            <div class="stat-value" style="color: @(stats.AlertsCount > 0 ? "var(--accent-red)" : "var(--accent-green)")">
+                @stats.AlertsCount
+            </div>
+            @if(stats.AlertsCount > 0)
+            {
+                <div style="font-size: 0.8rem; color: var(--accent-red); margin-top: 5px;">⚠ Suspicious activity detected</div>
+            }
+        </div>
+    </div>
+
+    <!-- Devices Table -->
+    <h3 style="margin-bottom: 15px;">Connected Endpoints</h3>
+    <div class="card" style="padding: 0; overflow: hidden;">
+        @if (devices == null)
+        {
+            <p style="padding: 20px;">Scanning network...</p>
+        }
+        else
+        {
+            <table style="width: 100%;">
+                <thead>
+                    <tr>
+                        <th style="padding-left: 24px;">Status</th>
+                        <th>Device Name</th>
+                        <th>IP Address</th>
+                        <th>MAC Address</th>
+                        <th>Vendor</th>
+                        <th style="padding-right: 24px;">Load</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var dev in devices)
+                    {
+                        <tr>
+                            <td style="padding-left: 24px;">
+                                <span class="status-badge @(dev.IsOnline ? "status-online" : "status-offline")">
+                                    <span class="status-dot @(dev.IsOnline ? "online" : "offline")"></span>
+                                    @(dev.IsOnline ? "Online" : "Offline")
+                                </span>
+                            </td>
+                            <td style="font-weight: 600; color: white;">@dev.Hostname</td>
+                            <td style="font-family: monospace; color: var(--accent-blue);">@dev.IpAddress</td>
+                            <td style="font-family: monospace; color: var(--text-secondary);">@dev.MacAddress</td>
+                            <td>@dev.Vendor</td>
+                            <td style="padding-right: 24px;">
+                                @if(dev.IsOnline)
+                                {
+                                    <div style="display:flex; align-items:center; gap: 10px;">
+                                        <div style="flex:1; height: 6px; background: #334155; border-radius: 3px; overflow:hidden; min-width: 60px;">
+                                            <div style="width: @(Math.Min(dev.CurrentTrafficMbps, 100))%; background: var(--accent-green); height: 100%;"></div>
+                                        </div>
+                                        <span style="font-size: 0.8rem; min-width: 40px;">@dev.CurrentTrafficMbps</span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span style="color: var(--text-secondary);">-</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+}
+
+<style>
+    @@keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
+
+@code {
+    private SystemStats? stats;
+    private List<NetworkDevice>? devices;
+    private bool isRefreshing = false;
+    private System.Threading.Timer? timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        timer = new System.Threading.Timer(async _ => 
+        {
+            await LoadData();
+            await InvokeAsync(StateHasChanged);
+        }, null, 2000, 2000);
+    }
+
+    private async Task RefreshData()
+    {
+        isRefreshing = true;
+        StateHasChanged(); 
+        
+        await Task.Delay(800); 
+        await LoadData();
+        
+        isRefreshing = false;
+    }
+
+    private async Task LoadData()
+    {
+        try 
+        {
+            stats = await Http.GetFromJsonAsync<SystemStats>("api/dashboard/stats");
+            devices = await Http.GetFromJsonAsync<List<NetworkDevice>>("api/dashboard/devices");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+        }
+    }
+    public void Dispose()
+    {
+        timer?.Dispose();
+    }
+}
