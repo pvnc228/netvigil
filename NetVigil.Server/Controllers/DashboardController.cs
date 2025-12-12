@@ -15,40 +15,43 @@ namespace NetVigil.Server.Controllers
             _sim = sim;
         }
 
+        // GET: api/dashboard/stats?mode=demo
         [HttpGet("stats")]
-        public ActionResult<SystemStats> GetStats()
+        public ActionResult<SystemStats> GetStats([FromQuery] string mode = "real")
         {
-            _sim.Tick(); // Каждый запрос чуть-чуть меняет цифры
-            return Ok(_sim.Stats);
+            if (mode == "demo")
+            {
+                _sim.TickDemo(); 
+                return Ok(_sim.DemoStats);
+            }
+
+            var realStats = new SystemStats
+            {
+                OnlineDevices = _sim.RealDevices.Count,
+                TotalDevices = _sim.RealDevices.Count
+            };
+            return Ok(realStats);
         }
 
+        // GET: api/dashboard/devices?mode=demo
         [HttpGet("devices")]
-        public ActionResult<List<NetworkDevice>> GetDevices()
+        public ActionResult<List<NetworkDevice>> GetDevices([FromQuery] string mode = "real")
         {
-            return Ok(_sim.Devices);
+            if (mode == "demo")
+            {
+                return Ok(_sim.DemoDevices);
+            }
+            return Ok(_sim.RealDevices);
         }
 
-        // --- ADMIN COMMANDS ---
 
         [HttpPost("spawn")]
-        public IActionResult SpawnDevice()
-        {
-            _sim.AddRandomDevice();
-            return Ok();
-        }
+        public IActionResult Spawn() { _sim.AddFakeDevice(); return Ok(); }
 
         [HttpPost("attack")]
-        public IActionResult TriggerAttack()
-        {
-            _sim.TriggerAttack();
-            return Ok();
-        }
+        public IActionResult Attack() { _sim.StartDemoAttack(); return Ok(); }
 
         [HttpPost("reset")]
-        public IActionResult Reset()
-        {
-            _sim.Reset();
-            return Ok();
-        }
+        public IActionResult Reset() { _sim.StopDemoAttack(); return Ok(); }
     }
 }

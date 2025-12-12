@@ -11,12 +11,14 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowBlazorClient",
         policy =>
         {
-            policy.WithOrigins("https://localhost:7031")
+            policy.WithOrigins("https://localhost:7031", "http://localhost:5001")
                   .AllowAnyMethod()
                   .AllowAnyHeader();
         });
 });
 builder.Services.AddSingleton<NetVigil.Server.Services.SimulationService>();
+builder.Services.AddGrpc();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -29,6 +31,7 @@ app.UseHttpsRedirection();
 
 app.UseCors("AllowBlazorClient");
 
+app.MapGrpcService<NetVigil.Server.Services.GrpcScanService>();
 
 app.UseAuthorization();
 

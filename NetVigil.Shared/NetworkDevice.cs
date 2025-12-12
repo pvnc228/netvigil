@@ -14,7 +14,7 @@ namespace NetVigil.Shared
         public string Vendor { get; set; } = "Generic";
         public bool IsOnline { get; set; }
         public DateTime LastSeen { get; set; }
-        public double CurrentTrafficMbps { get; set; } // Текущий трафик
-        public string Type { get; set; } = "Device"; // PC, Mobile, IoT
+        public double CurrentTrafficMbps { get; set; } 
+        public string Type { get; set; } = "Device"; 
     }
 }

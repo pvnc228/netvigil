@@ -4,71 +4,83 @@ namespace NetVigil.Server.Services
 {
     public class SimulationService
     {
-        public List<NetworkDevice> Devices { get; private set; } = new();
-        public SystemStats Stats { get; private set; } = new();
+        public List<NetworkDevice> DemoDevices { get; private set; } = new();
+        public SystemStats DemoStats { get; private set; } = new();
+
+        public List<NetworkDevice> RealDevices { get; private set; } = new();
+
         private Random _rnd = new();
+        private bool _isDemoAttackActive = false;
 
         public SimulationService()
         {
-            // Начальное состояние
-            Devices.Add(new NetworkDevice { MacAddress = "AA:BB:CC:01", IpAddress = "192.168.1.10", Hostname = "Admin-PC", Vendor = "Dell", IsOnline = true, Type = "PC", CurrentTrafficMbps = 45.2 });
-            Devices.Add(new NetworkDevice { MacAddress = "AA:BB:CC:02", IpAddress = "192.168.1.15", Hostname = "iPhone-User", Vendor = "Apple", IsOnline = true, Type = "Mobile", CurrentTrafficMbps = 2.1 });
-            Devices.Add(new NetworkDevice { MacAddress = "AA:BB:CC:03", IpAddress = "192.168.1.200", Hostname = "Smart-TV", Vendor = "Samsung", IsOnline = false, Type = "IoT", CurrentTrafficMbps = 0 });
-
-            UpdateStats();
+            InitDemoData();
         }
 
-        // Метод для легкого колебания цифр (чтобы выглядело живым)
-        public void Tick()
+        private void InitDemoData()
         {
-            foreach (var dev in Devices)
+            DemoDevices.Clear();
+            DemoDevices.Add(new NetworkDevice { Hostname = "Director-PC", IpAddress = "192.168.1.10", Vendor = "Dell", IsOnline = true, CurrentTrafficMbps = 15.5 });
+            DemoDevices.Add(new NetworkDevice { Hostname = "Office-Printer", IpAddress = "192.168.1.50", Vendor = "HP", IsOnline = true, CurrentTrafficMbps = 0.5 });
+            DemoDevices.Add(new NetworkDevice { Hostname = "Lobby-Camera", IpAddress = "192.168.1.99", Vendor = "Hikvision", IsOnline = true, CurrentTrafficMbps = 4.2 });
+            DemoDevices.Add(new NetworkDevice { Hostname = "Unknown-Tablet", IpAddress = "192.168.1.144", Vendor = "Android", IsOnline = true, CurrentTrafficMbps = 1.1 });
+        }
+
+        public void TickDemo()
+        {
+            foreach (var dev in DemoDevices)
             {
-                if (dev.IsOnline)
-                {
-                    // Случайное изменение трафика +/- 5mbps
-                    dev.CurrentTrafficMbps += (_rnd.NextDouble() * 10) - 5;
-                    if (dev.CurrentTrafficMbps < 0) dev.CurrentTrafficMbps = 0;
-                    if (dev.CurrentTrafficMbps > 1000) dev.CurrentTrafficMbps = 900;
-                    dev.CurrentTrafficMbps = Math.Round(dev.CurrentTrafficMbps, 1);
-                }
+                double jitter = (_rnd.NextDouble() * 2.0) - 1.0;
+
+                if (_isDemoAttackActive) jitter += _rnd.Next(20, 50);
+
+                dev.CurrentTrafficMbps += jitter;
+
+                if (dev.CurrentTrafficMbps < 0) dev.CurrentTrafficMbps = 0.1;
+                if (dev.CurrentTrafficMbps > 1000) dev.CurrentTrafficMbps = 999;
+
+                dev.CurrentTrafficMbps = Math.Round(dev.CurrentTrafficMbps, 1);
             }
-            UpdateStats();
+
+            DemoStats.OnlineDevices = DemoDevices.Count;
+            DemoStats.TotalDevices = DemoDevices.Count + 2; 
+            DemoStats.TotalTrafficIn = Math.Round(DemoDevices.Sum(d => d.CurrentTrafficMbps), 1);
+
+            
+            if (_isDemoAttackActive) DemoStats.AlertsCount = 5;
+            else DemoStats.AlertsCount = 0;
         }
 
-        public void AddRandomDevice()
-        {
-            var vendors = new[] { "HP", "Xiaomi", "Unknown", "Sony" };
-            var types = new[] { "IoT", "Mobile", "Laptop" };
+        public void StartDemoAttack() => _isDemoAttackActive = true;
+        public void StopDemoAttack() => _isDemoAttackActive = false;
 
-            Devices.Add(new NetworkDevice
+        public void AddFakeDevice()
+        {
+            DemoDevices.Add(new NetworkDevice
             {
-                MacAddress = $"AA:BB:CC:DD:{_rnd.Next(10, 99)}",
-                IpAddress = $"192.168.1.{_rnd.Next(20, 250)}",
-                Hostname = $"New-Device-{_rnd.Next(100, 999)}",
-                Vendor = vendors[_rnd.Next(vendors.Length)],
+                Hostname = $"Guest-WiFi-{_rnd.Next(100, 999)}",
+                IpAddress = $"192.168.1.{_rnd.Next(100, 200)}",
+                Vendor = "Apple",
                 IsOnline = true,
-                Type = types[_rnd.Next(types.Length)],
-                CurrentTrafficMbps = _rnd.Next(1, 50)
+                CurrentTrafficMbps = 5.0
             });
         }
-
-        public void TriggerAttack()
+        public void UpdateRealDevice(NetworkDevice device)
         {
-            Stats.AlertsCount += 5;
-            foreach (var dev in Devices) dev.CurrentTrafficMbps += 500; // DDOS effect
-        }
+            var existing = RealDevices.FirstOrDefault(d => d.MacAddress == device.MacAddress);
 
-        public void Reset()
-        {
-            Stats.AlertsCount = 0;
-            foreach (var dev in Devices) dev.CurrentTrafficMbps = _rnd.Next(1, 20);
-        }
-
-        private void UpdateStats()
-        {
-            Stats.TotalDevices = Devices.Count;
-            Stats.OnlineDevices = Devices.Count(d => d.IsOnline);
-            Stats.TotalTrafficIn = Math.Round(Devices.Sum(d => d.CurrentTrafficMbps), 1);
+            if (existing != null)
+            {
+                existing.IsOnline = true;
+                existing.LastSeen = DateTime.Now;
+                existing.IpAddress = device.IpAddress; 
+            }
+            else
+            {
+                device.LastSeen = DateTime.Now;
+                device.IsOnline = true;
+                RealDevices.Add(device);
+            }
         }
     }
 }

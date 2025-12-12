@@ -1,163 +1,266 @@
 ﻿@page "/"
 @using NetVigil.Shared
 @inject HttpClient Http
+@inject NetVigil.Client.Services.AppState AppState
 @implements IDisposable
 
-<PageTitle>NetVigil - Overview</PageTitle>
+<PageTitle>NetVigil</PageTitle>
 
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
-    <div>
-        <h2 style="margin: 0; font-weight: 700;">Network Overview</h2>
-        <div style="color: var(--text-secondary); font-size: 0.9rem;">Real-time monitoring active</div>
-    </div>
-    <button class="btn-primary" @onclick="RefreshData">
-        @if (isRefreshing)
-        {
-            <span style="animation: spin 1s linear infinite; display:inline-block;">↻</span> <span>Scanning...</span>
-        }
-        else
-        {
-            <span>↻ Refresh Data</span>
-        }
-    </button>
-</div>
-
-@if (stats == null)
+@if (!AppState.IsModeSelected)
 {
-    <div style="text-align:center; padding: 50px; color: var(--text-secondary);">
-        <div style="font-size: 2rem; margin-bottom: 10px;">📡</div>
-        Connecting to Agents...
+    <div style="height: 80vh; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 40px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="font-size: 3rem; font-weight: 800; margin: 0;">NET<span style="color: var(--accent-green);">VIGIL</span></h1>
+            <div style="color: var(--text-secondary);">Select operational environment</div>
+        </div>
+        <div style="display: flex; gap: 30px; flex-wrap: wrap; justify-content: center;">
+            <div class="mode-card real" @onclick="EnterRealMode">
+                <div class="icon">🛡️</div>
+                <h3>Production Mode</h3>
+                <div class="badge">Live Data</div>
+            </div>
+            <div class="mode-card demo" @onclick="EnterDemoMode">
+                <div class="icon">🧪</div>
+                <h3>Demo Simulation</h3>
+                <div class="badge demo-badge">Simulation</div>
+            </div>
+        </div>
     </div>
+    <style>
+        .mode-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 40px;
+            width: 280px;
+            border-radius: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+            .mode-card:hover {
+                transform: translateY(-5px);
+            }
+
+            .mode-card.real:hover {
+                border-color: var(--accent-green);
+                box-shadow: 0 0 30px rgba(16, 185, 129, 0.2);
+            }
+
+            .mode-card.demo:hover {
+                border-color: var(--accent-red);
+                box-shadow: 0 0 30px rgba(239, 68, 68, 0.2);
+            }
+
+        .icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+
+        .badge {
+            margin-top: 20px;
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            background: #334155;
+            color: white;
+        }
+
+        .demo-badge {
+            background: var(--accent-red);
+        }
+    </style>
 }
 else
 {
-    <!-- Stats Grid -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin-bottom: 30px;">
-        <div class="card">
-            <div class="stat-label">Online Devices</div>
-            <div class="stat-value">@stats.OnlineDevices <span style="font-size:1.2rem; color:var(--text-secondary); font-weight:400;">/ @stats.TotalDevices</span></div>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+        <div>
+            <h2 style="margin: 0; font-weight: 700;">@(AppState.IsDemoMode ? "Simulation Overview" : "Production Network")</h2>
+            <div style="color: var(--text-secondary); font-size: 0.9rem;">@(AppState.IsDemoMode ? "Virtual environment active" : "Monitoring local agents")</div>
         </div>
-        <div class="card">
-            <div class="stat-label">Total Traffic (In)</div>
-            <div class="stat-value">@stats.TotalTrafficIn <span style="font-size:1rem; font-weight:400;">Mbps</span></div>
-            <div style="height: 4px; width: 100%; background: #334155; margin-top: 10px; border-radius: 2px;">
-                <div style="height: 100%; width: 60%; background: var(--accent-green); border-radius: 2px;"></div>
-            </div>
-        </div>
-        <div class="card">
-            <div class="stat-label">Security Alerts</div>
-            <div class="stat-value" style="color: @(stats.AlertsCount > 0 ? "var(--accent-red)" : "var(--accent-green)")">
-                @stats.AlertsCount
-            </div>
-            @if(stats.AlertsCount > 0)
-            {
-                <div style="font-size: 0.8rem; color: var(--accent-red); margin-top: 5px;">⚠ Suspicious activity detected</div>
-            }
+        <div style="display: flex; gap: 10px;">
+            <button class="btn-primary" style="background: #334155;" @onclick="ExitMode">Exit</button>
+            <button class="btn-primary" @onclick="RefreshData">
+                @if (isRefreshing)
+                {
+                    <span style="animation: spin 1s linear infinite; display:inline-block;">↻</span>
+                }
+                else
+                {
+
+                    <span>↻ Refresh</span>
+                }
+            </button>
         </div>
     </div>
 
-    <!-- Devices Table -->
-    <h3 style="margin-bottom: 15px;">Connected Endpoints</h3>
-    <div class="card" style="padding: 0; overflow: hidden;">
-        @if (devices == null)
-        {
-            <p style="padding: 20px;">Scanning network...</p>
-        }
-        else
-        {
+    @if (stats == null)
+    {
+        <div style="text-align:center; padding: 50px;">Restoring session...</div>
+    }
+    else
+    {
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin-bottom: 30px;">
+            <div class="card">
+                <div class="stat-label">Online Devices</div>
+                <div class="stat-value">@stats.OnlineDevices <span style="font-size:1.2rem; color:var(--text-secondary); font-weight:400;">/ @stats.TotalDevices</span></div>
+            </div>
+            <div class="card">
+                <div class="stat-label">Total Traffic (In)</div>
+                <div class="stat-value">@stats.TotalTrafficIn <span style="font-size:1rem; font-weight:400;">Mbps</span></div>
+                <div style="height: 4px; width: 100%; background: #334155; margin-top: 10px; border-radius: 2px;">
+                    <div style="height: 100%; width: @(Math.Min(stats.TotalTrafficIn, 100))%; background: var(--accent-green); border-radius: 2px; transition: width 0.5s ease;"></div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="stat-label">Alerts</div>
+                <div class="stat-value" style="color: @(stats.AlertsCount > 0 ? "var(--accent-red)" : "var(--accent-green)")">@stats.AlertsCount</div>
+            </div>
+        </div>
+
+        <div class="card" style="padding: 0; overflow: hidden;">
             <table style="width: 100%;">
                 <thead>
-                    <tr>
-                        <th style="padding-left: 24px;">Status</th>
-                        <th>Device Name</th>
-                        <th>IP Address</th>
-                        <th>MAC Address</th>
-                        <th>Vendor</th>
-                        <th style="padding-right: 24px;">Load</th>
-                    </tr>
+                    <tr><th style="padding-left:24px;">Status</th><th>Hostname</th><th>IP</th><th>Vendor</th><th style="padding-right:24px;">Load</th></tr>
                 </thead>
                 <tbody>
-                    @foreach (var dev in devices)
+                    @if (devices != null)
                     {
-                        <tr>
-                            <td style="padding-left: 24px;">
-                                <span class="status-badge @(dev.IsOnline ? "status-online" : "status-offline")">
-                                    <span class="status-dot @(dev.IsOnline ? "online" : "offline")"></span>
-                                    @(dev.IsOnline ? "Online" : "Offline")
-                                </span>
-                            </td>
-                            <td style="font-weight: 600; color: white;">@dev.Hostname</td>
-                            <td style="font-family: monospace; color: var(--accent-blue);">@dev.IpAddress</td>
-                            <td style="font-family: monospace; color: var(--text-secondary);">@dev.MacAddress</td>
-                            <td>@dev.Vendor</td>
-                            <td style="padding-right: 24px;">
-                                @if(dev.IsOnline)
-                                {
-                                    <div style="display:flex; align-items:center; gap: 10px;">
-                                        <div style="flex:1; height: 6px; background: #334155; border-radius: 3px; overflow:hidden; min-width: 60px;">
-                                            <div style="width: @(Math.Min(dev.CurrentTrafficMbps, 100))%; background: var(--accent-green); height: 100%;"></div>
-                                        </div>
-                                        <span style="font-size: 0.8rem; min-width: 40px;">@dev.CurrentTrafficMbps</span>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <span style="color: var(--text-secondary);">-</span>
-                                }
-                            </td>
-                        </tr>
+                        @foreach (var dev in devices)
+                        {
+                            <tr>
+                                <td style="padding-left:24px;"><span class="status-badge status-online">Online</span></td>
+                                <td style="font-weight:600;">@dev.Hostname</td>
+                                <td style="font-family:monospace; color:var(--accent-blue);">@dev.IpAddress</td>
+                                <td>@dev.Vendor</td>
+                                <td style="padding-right:24px;">@dev.CurrentTrafficMbps Mbps</td>
+                            </tr>
+                        }
                     }
                 </tbody>
             </table>
+        </div>
+    }
+    <style>
+        @@keyframes spin {
+            100% {
+                transform: rotate(360deg);
+            }
         }
-    </div>
+    </style>
 }
-
-<style>
-    @@keyframes spin { 100% { transform: rotate(360deg); } }
-</style>
 
 @code {
     private SystemStats? stats;
     private List<NetworkDevice>? devices;
     private bool isRefreshing = false;
     private System.Threading.Timer? timer;
+    private Random _rnd = new Random(); 
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        await LoadData();
-        timer = new System.Threading.Timer(async _ => 
+        AppState.OnChange += StateHasChanged;
+
+        if (AppState.IsModeSelected)
         {
-            await LoadData();
-            await InvokeAsync(StateHasChanged);
-        }, null, 2000, 2000);
+            if (AppState.IsDemoMode && stats == null) InitFakeData();
+
+            StartTimer();
+        }
+    }
+
+    private void InitFakeData()
+    {
+        stats = new SystemStats { OnlineDevices = 4, TotalDevices = 5, TotalTrafficIn = 12.5 };
+        devices = new List<NetworkDevice> {
+            new NetworkDevice { Hostname = "Director-PC", IpAddress = "192.168.1.10", Vendor = "Dell", IsOnline = true, CurrentTrafficMbps = 15.5 },
+            new NetworkDevice { Hostname = "Office-Printer", IpAddress = "192.168.1.50", Vendor = "HP", IsOnline = true, CurrentTrafficMbps = 0.5 },
+            new NetworkDevice { Hostname = "Lobby-Camera", IpAddress = "192.168.1.99", Vendor = "Hikvision", IsOnline = true, CurrentTrafficMbps = 4.2 },
+            new NetworkDevice { Hostname = "Guest-Tablet", IpAddress = "192.168.1.144", Vendor = "Samsung", IsOnline = true, CurrentTrafficMbps = 1.1 }
+        };
+    }
+
+    private async Task EnterDemoMode()
+    {
+        AppState.SetDemoMode();
+        InitFakeData(); 
+        try { await Http.PostAsync("api/dashboard/init-demo", null); } catch { }
+
+        StartTimer();
+    }
+
+    private async Task EnterRealMode()
+    {
+        AppState.SetRealMode();
+        await RefreshData();
+        StartTimer();
+    }
+
+    private void StartTimer()
+    {
+        timer?.Dispose();
+        timer = new System.Threading.Timer(async _ => await OnTimerTick(), null, 0, 1000);
+    }
+
+    private async Task OnTimerTick()
+    {
+        if (!AppState.IsModeSelected) return;
+
+        string mode = AppState.IsDemoMode ? "demo" : "real";
+
+        try
+        {
+            var newStats = await Http.GetFromJsonAsync<SystemStats>($"api/dashboard/stats?mode={mode}");
+            var newDevs = await Http.GetFromJsonAsync<List<NetworkDevice>>($"api/dashboard/devices?mode={mode}");
+
+            if (newStats != null) stats = newStats;
+            if (newDevs != null) devices = newDevs;
+        }
+        catch
+        {
+            if (AppState.IsDemoMode && devices != null)
+            {
+                SimulateLocalMovement();
+            }
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void SimulateLocalMovement()
+    {
+        if (devices == null || stats == null) return;
+
+        double total = 0;
+        foreach (var d in devices)
+        {
+            d.CurrentTrafficMbps += (_rnd.NextDouble() * 2.0) - 1.0;
+            if (d.CurrentTrafficMbps < 0) d.CurrentTrafficMbps = 0.1;
+            d.CurrentTrafficMbps = Math.Round(d.CurrentTrafficMbps, 1);
+            total += d.CurrentTrafficMbps;
+        }
+        stats.TotalTrafficIn = Math.Round(total, 1);
     }
 
     private async Task RefreshData()
     {
         isRefreshing = true;
-        StateHasChanged(); 
-        
-        await Task.Delay(800); 
-        await LoadData();
-        
+        await OnTimerTick();
         isRefreshing = false;
     }
 
-    private async Task LoadData()
+    private void ExitMode()
     {
-        try 
-        {
-            stats = await Http.GetFromJsonAsync<SystemStats>("api/dashboard/stats");
-            devices = await Http.GetFromJsonAsync<List<NetworkDevice>>("api/dashboard/devices");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error: {ex.Message}");
-        }
+        timer?.Dispose();
+        AppState.ResetMode();
+        stats = null;
+        devices = null;
     }
+
     public void Dispose()
     {
+        AppState.OnChange -= StateHasChanged;
         timer?.Dispose();
     }
 }

@@ -56,7 +56,6 @@
     private async Task ToggleTheme()
     {
         isLightMode = !isLightMode;
-        // JS-магия для добавления класса к body
         if (isLightMode)
             await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('light-mode')");
         else
