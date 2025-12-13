@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.36804.6 d17.14
+VisualStudioVersion = 17.14.36804.6
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetVigil", "NetVigil.csproj", "{2AC0E38E-CC99-4204-9C92-CAA8AB7B6A3F}"
 EndProject
@@ -10,6 +10,11 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetVigil.Server", "..\NetVigil.Server\NetVigil.Server.csproj", "{91D88960-2B5D-4C54-848E-BF7558763C1F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetVigil.Client", "..\NetVigil.Client\NetVigil.Client.csproj", "{98F1A47A-FA11-4F4F-A886-CAB198FE387D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetVigil.Agent", "..\NetVigil.Agent\NetVigil.Agent.csproj", "{83B19F50-90D5-4DD8-A857-3913234E76C4}"
+	ProjectSection(ProjectDependencies) = postProject
+		{3E478D38-AE82-46B7-914C-D0728B77E08B} = {3E478D38-AE82-46B7-914C-D0728B77E08B}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +38,10 @@ Global
 		{98F1A47A-FA11-4F4F-A886-CAB198FE387D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{98F1A47A-FA11-4F4F-A886-CAB198FE387D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{98F1A47A-FA11-4F4F-A886-CAB198FE387D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{83B19F50-90D5-4DD8-A857-3913234E76C4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{83B19F50-90D5-4DD8-A857-3913234E76C4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{83B19F50-90D5-4DD8-A857-3913234E76C4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{83B19F50-90D5-4DD8-A857-3913234E76C4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
