@@ -1,0 +1,6 @@
+@NetVigil.Server_HostAddress = http://localhost:5277
+
+GET {{NetVigil.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

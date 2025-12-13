@@ -1,0 +1,19 @@
+syntax = "proto3";
+option csharp_namespace = "NetVigil.Shared.Protos";
+package networkscan;
+
+service NetworkScanner {
+  rpc ReportDevice (DeviceData) returns (ScanResponse);
+}
+
+message DeviceData {
+  string mac_address = 1;
+  string ip_address = 2;
+  string hostname = 3;
+  string vendor = 4;
+}
+
+message ScanResponse {
+  bool success = 1;
+  string message = 2;
+}

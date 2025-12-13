@@ -1,0 +1,31 @@
+﻿@page "/settings"
+
+<div style="max-width: 800px;">
+    <h2 style="margin-bottom: 20px;">System Configuration</h2>
+
+    <div class="card" style="margin-bottom: 20px;">
+        <h4 style="margin-top:0; color:white;">Scanning Agent</h4>
+        <p style="color: #94a3b8; font-size: 0.9rem;">Configure how the local agent scans the network.</p>
+
+        <div style="margin-top: 15px; display:flex; flex-direction:column; gap: 15px;">
+            <label style="display:flex; align-items:center; gap: 10px;">
+                <input type="checkbox" checked style="accent-color: var(--accent-green); transform: scale(1.2);">
+                <span>Enable Passive Monitoring (PCAP)</span>
+            </label>
+            <label style="display:flex; align-items:center; gap: 10px;">
+                <input type="checkbox" checked style="accent-color: var(--accent-green); transform: scale(1.2);">
+                <span>Active ARP Scanning (Every 5s)</span>
+            </label>
+        </div>
+    </div>
+
+    <div class="card">
+        <h4 style="margin-top:0; color:white;">Notifications</h4>
+        <div style="margin-top: 15px;">
+            <label style="display:block; margin-bottom: 5px; font-size: 0.9rem;">Telegram Bot Token</label>
+            <input type="password" value="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+                   style="width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 6px;">
+        </div>
+        <button class="btn-primary" style="margin-top: 20px;">Save Changes</button>
+    </div>
+</div>

@@ -1,0 +1,35 @@
+﻿@page "/admin-console"
+@inject HttpClient Http
+
+<div class="container">
+    <h2 style="color: var(--accent-red);">⚠ Simulation Control (Demo Mode)</h2>
+    <p>Use this panel to trigger events during the presentation.</p>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-top: 30px;">
+
+        <div class="card" style="border-color: var(--accent-green);">
+            <h4>New Device</h4>
+            <p style="font-size:0.8rem; color:#888;">Simulates a new device joining the network.</p>
+            <button class="btn-primary" @onclick="SpawnDevice">➕ Spawn Device</button>
+        </div>
+
+        <div class="card" style="border-color: var(--accent-red);">
+            <h4>DDoS Attack</h4>
+            <p style="font-size:0.8rem; color:#888;">Simulates massive traffic spike and alerts.</p>
+            <button class="btn-primary" style="background: var(--accent-red);" @onclick="TriggerAttack">🔥 TRIGGER ATTACK</button>
+        </div>
+
+        <div class="card">
+            <h4>Reset System</h4>
+            <p style="font-size:0.8rem; color:#888;">Clear alerts and normalize traffic.</p>
+            <button class="btn-primary" style="background: #64748b;" @onclick="ResetSystem">↺ Reset</button>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    private async Task SpawnDevice() => await Http.PostAsync("api/dashboard/spawn", null);
+    private async Task TriggerAttack() => await Http.PostAsync("api/dashboard/attack", null);
+    private async Task ResetSystem() => await Http.PostAsync("api/dashboard/reset", null);
+}
