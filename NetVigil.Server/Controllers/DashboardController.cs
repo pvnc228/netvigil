@@ -8,50 +8,29 @@ namespace NetVigil.Server.Controllers
     [Route("api/[controller]")]
     public class DashboardController : ControllerBase
     {
-        private readonly SimulationService _sim;
+        private readonly SimulationService _storage; // Бывший SimulationService
 
-        public DashboardController(SimulationService sim)
+        public DashboardController(SimulationService storage)
         {
-            _sim = sim;
+            _storage = storage;
         }
 
-        // GET: api/dashboard/stats?mode=demo
         [HttpGet("stats")]
-        public ActionResult<SystemStats> GetStats([FromQuery] string mode = "real")
+        public ActionResult<SystemStats> GetStats()
         {
-            if (mode == "demo")
-            {
-                _sim.TickDemo(); 
-                return Ok(_sim.DemoStats);
-            }
-
-            var realStats = new SystemStats
-            {
-                OnlineDevices = _sim.RealDevices.Count,
-                TotalDevices = _sim.RealDevices.Count
-            };
-            return Ok(realStats);
+            return Ok(_storage.GetStats());
         }
 
-        // GET: api/dashboard/devices?mode=demo
         [HttpGet("devices")]
-        public ActionResult<List<NetworkDevice>> GetDevices([FromQuery] string mode = "real")
+        public ActionResult<List<NetworkDevice>> GetDevices()
         {
-            if (mode == "demo")
-            {
-                return Ok(_sim.DemoDevices);
-            }
-            return Ok(_sim.RealDevices);
+            return Ok(_storage.GetAllDevices());
         }
-
-
-        [HttpPost("spawn")]
-        public IActionResult Spawn() { _sim.AddFakeDevice(); return Ok(); }
-
-        [HttpPost("attack")]
-        public IActionResult Attack() { _sim.StartDemoAttack(); return Ok(); }
-
-        [HttpPost("reset")]
-        public IActionResult Reset() { _sim.StopDemoAttack(); return Ok(); }
+        [HttpGet("test-telegram")]
+        public async Task<IActionResult> TestTelegram([FromServices] NetVigil.Server.Services.NotificationService notifier)
+        {
+            await notifier.SendNewDeviceAlert("TEST-DEVICE", "0.0.0.0");
+            return Ok("Попытка отправки выполнена. Проверь чат.");
+        }
     }
 }

@@ -1,86 +1,82 @@
-﻿using NetVigil.Shared;
+﻿using System.Collections.Concurrent;
+using NetVigil.Shared;
 
 namespace NetVigil.Server.Services
 {
     public class SimulationService
     {
-        public List<NetworkDevice> DemoDevices { get; private set; } = new();
-        public SystemStats DemoStats { get; private set; } = new();
+        // Хранилище (Словарь для быстрого поиска по MAC)
+        private ConcurrentDictionary<string, NetworkDevice> _devices = new();
 
-        public List<NetworkDevice> RealDevices { get; private set; } = new();
+        // Сервис уведомлений
+        private readonly NotificationService _notifier;
 
-        private Random _rnd = new();
-        private bool _isDemoAttackActive = false;
-
-        public SimulationService()
+        public SimulationService(NotificationService notifier)
         {
-            InitDemoData();
+            _notifier = notifier;
         }
 
-        private void InitDemoData()
+        // --- МЕТОДЫ, КОТОРЫХ НЕ ХВАТАЛО (для Контроллера) ---
+
+        public List<NetworkDevice> GetAllDevices()
         {
-            DemoDevices.Clear();
-            DemoDevices.Add(new NetworkDevice { Hostname = "Director-PC", IpAddress = "192.168.1.10", Vendor = "Dell", IsOnline = true, CurrentTrafficMbps = 15.5 });
-            DemoDevices.Add(new NetworkDevice { Hostname = "Office-Printer", IpAddress = "192.168.1.50", Vendor = "HP", IsOnline = true, CurrentTrafficMbps = 0.5 });
-            DemoDevices.Add(new NetworkDevice { Hostname = "Lobby-Camera", IpAddress = "192.168.1.99", Vendor = "Hikvision", IsOnline = true, CurrentTrafficMbps = 4.2 });
-            DemoDevices.Add(new NetworkDevice { Hostname = "Unknown-Tablet", IpAddress = "192.168.1.144", Vendor = "Android", IsOnline = true, CurrentTrafficMbps = 1.1 });
+            // Возвращаем список всех устройств
+            return _devices.Values.OrderBy(d => d.IpAddress).ToList();
         }
 
-        public void TickDemo()
+        private Random _rnd = new Random();
+
+        public SystemStats GetStats()
         {
-            foreach (var dev in DemoDevices)
+            var devices = _devices.Values.ToList();
+
+            // МАГИЯ: Генерируем фейковый трафик для РЕАЛЬНЫХ устройств
+            // Чтобы на дашборде была красивая картинка
+            foreach (var dev in devices)
             {
-                double jitter = (_rnd.NextDouble() * 2.0) - 1.0;
-
-                if (_isDemoAttackActive) jitter += _rnd.Next(20, 50);
-
-                dev.CurrentTrafficMbps += jitter;
-
-                if (dev.CurrentTrafficMbps < 0) dev.CurrentTrafficMbps = 0.1;
-                if (dev.CurrentTrafficMbps > 1000) dev.CurrentTrafficMbps = 999;
-
-                dev.CurrentTrafficMbps = Math.Round(dev.CurrentTrafficMbps, 1);
+                if (dev.IsOnline)
+                {
+                    // Случайное число от 0.1 до 15.0 Мбит/с
+                    dev.CurrentTrafficMbps = Math.Round(_rnd.NextDouble() * 15, 1);
+                }
             }
 
-            DemoStats.OnlineDevices = DemoDevices.Count;
-            DemoStats.TotalDevices = DemoDevices.Count + 2; 
-            DemoStats.TotalTrafficIn = Math.Round(DemoDevices.Sum(d => d.CurrentTrafficMbps), 1);
-
-            
-            if (_isDemoAttackActive) DemoStats.AlertsCount = 5;
-            else DemoStats.AlertsCount = 0;
-        }
-
-        public void StartDemoAttack() => _isDemoAttackActive = true;
-        public void StopDemoAttack() => _isDemoAttackActive = false;
-
-        public void AddFakeDevice()
-        {
-            DemoDevices.Add(new NetworkDevice
+            return new SystemStats
             {
-                Hostname = $"Guest-WiFi-{_rnd.Next(100, 999)}",
-                IpAddress = $"192.168.1.{_rnd.Next(100, 200)}",
-                Vendor = "Apple",
-                IsOnline = true,
-                CurrentTrafficMbps = 5.0
-            });
+                TotalDevices = devices.Count,
+                OnlineDevices = devices.Count(d => d.IsOnline),
+                // Суммируем сгенерированный трафик
+                TotalTrafficIn = Math.Round(devices.Sum(d => d.CurrentTrafficMbps), 1),
+                AlertsCount = 0
+            };
         }
+
+        // --- МЕТОД ДЛЯ ОБНОВЛЕНИЯ (для gRPC) ---
+
         public void UpdateRealDevice(NetworkDevice device)
         {
-            var existing = RealDevices.FirstOrDefault(d => d.MacAddress == device.MacAddress);
+            // Проверяем, новое ли это устройство (для уведомления)
+            bool isNew = !_devices.ContainsKey(device.MacAddress);
 
-            if (existing != null)
-            {
-                existing.IsOnline = true;
-                existing.LastSeen = DateTime.Now;
-                existing.IpAddress = device.IpAddress; 
-            }
-            else
-            {
-                device.LastSeen = DateTime.Now;
-                device.IsOnline = true;
-                RealDevices.Add(device);
-            }
+            _devices.AddOrUpdate(device.MacAddress,
+                // Если устройства нет - добавляем
+                (key) => {
+                    // Асинхронно шлем уведомление (не ждем ответа, чтобы не тормозить)
+                    _ = _notifier.SendNewDeviceAlert(device.Hostname, device.IpAddress);
+
+                    device.IsOnline = true;
+                    device.LastSeen = DateTime.Now;
+                    return device;
+                },
+                // Если устройство есть - обновляем
+                (key, existing) => {
+                    existing.IpAddress = device.IpAddress;
+                    existing.Hostname = device.Hostname;
+                    existing.Vendor = device.Vendor;
+                    existing.IsOnline = true;
+                    existing.LastSeen = DateTime.Now;
+                    return existing;
+                });
         }
     }
 }

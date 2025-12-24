@@ -1,266 +1,205 @@
 ﻿@page "/"
 @using NetVigil.Shared
 @inject HttpClient Http
-@inject NetVigil.Client.Services.AppState AppState
 @implements IDisposable
 
-<PageTitle>NetVigil</PageTitle>
+<PageTitle>NetVigil - Dashboard</PageTitle>
 
-@if (!AppState.IsModeSelected)
-{
-    <div style="height: 80vh; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 40px;">
-        <div style="text-align: center; margin-bottom: 20px;">
-            <h1 style="font-size: 3rem; font-weight: 800; margin: 0;">NET<span style="color: var(--accent-green);">VIGIL</span></h1>
-            <div style="color: var(--text-secondary);">Select operational environment</div>
-        </div>
-        <div style="display: flex; gap: 30px; flex-wrap: wrap; justify-content: center;">
-            <div class="mode-card real" @onclick="EnterRealMode">
-                <div class="icon">🛡️</div>
-                <h3>Production Mode</h3>
-                <div class="badge">Live Data</div>
-            </div>
-            <div class="mode-card demo" @onclick="EnterDemoMode">
-                <div class="icon">🧪</div>
-                <h3>Demo Simulation</h3>
-                <div class="badge demo-badge">Simulation</div>
-            </div>
-        </div>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+    <div>
+        <h2 style="margin: 0; font-weight: 700;">Network Dashboard</h2>
+        <div style="color: var(--text-secondary); font-size: 0.9rem;">Live monitoring active</div>
     </div>
-    <style>
-        .mode-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            padding: 40px;
-            width: 280px;
-            border-radius: 16px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-align: center;
-        }
-
-            .mode-card:hover {
-                transform: translateY(-5px);
+    
+    <div style="display: flex; gap: 10px;">
+        <button class="btn-primary" @onclick="RefreshData">
+            @if (isRefreshing)
+            {
+                <span style="animation: spin 1s linear infinite; display:inline-block;">↻</span> <span>Scanning...</span>
             }
-
-            .mode-card.real:hover {
-                border-color: var(--accent-green);
-                box-shadow: 0 0 30px rgba(16, 185, 129, 0.2);
+            else
+            {
+                <span>↻ Refresh</span>
             }
+        </button>
+    </div>
+</div>
 
-            .mode-card.demo:hover {
-                border-color: var(--accent-red);
-                box-shadow: 0 0 30px rgba(239, 68, 68, 0.2);
-            }
-
-        .icon {
-            font-size: 3rem;
-            margin-bottom: 20px;
-        }
-
-        .badge {
-            margin-top: 20px;
-            display: inline-block;
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            background: #334155;
-            color: white;
-        }
-
-        .demo-badge {
-            background: var(--accent-red);
-        }
-    </style>
+@if (stats == null)
+{
+    <div style="text-align:center; padding: 50px; color: var(--text-secondary);">
+        <div style="font-size: 2rem; margin-bottom: 10px;">📡</div>
+        <div>Connecting to Server...</div>
+    </div>
 }
 else
 {
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
-        <div>
-            <h2 style="margin: 0; font-weight: 700;">@(AppState.IsDemoMode ? "Simulation Overview" : "Production Network")</h2>
-            <div style="color: var(--text-secondary); font-size: 0.9rem;">@(AppState.IsDemoMode ? "Virtual environment active" : "Monitoring local agents")</div>
+    <!-- Stats Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin-bottom: 30px;">
+        <div class="card">
+            <div class="stat-label">Online Devices</div>
+            <div class="stat-value">@stats.OnlineDevices <span style="font-size:1.2rem; color:var(--text-secondary); font-weight:400;">/ @stats.TotalDevices</span></div>
         </div>
-        <div style="display: flex; gap: 10px;">
-            <button class="btn-primary" style="background: #334155;" @onclick="ExitMode">Exit</button>
-            <button class="btn-primary" @onclick="RefreshData">
-                @if (isRefreshing)
-                {
-                    <span style="animation: spin 1s linear infinite; display:inline-block;">↻</span>
-                }
-                else
-                {
-
-                    <span>↻ Refresh</span>
-                }
-            </button>
+        <div class="card">
+            <div class="stat-label">Total Traffic (In)</div>
+            <div class="stat-value">@stats.TotalTrafficIn <span style="font-size:1rem; font-weight:400;">Mbps</span></div>
+        </div>
+        <div class="card">
+            <div class="stat-label">Alerts</div>
+            <div class="stat-value" style="color: var(--accent-green)">@stats.AlertsCount</div>
         </div>
     </div>
+   
 
-    @if (stats == null)
-    {
-        <div style="text-align:center; padding: 50px;">Restoring session...</div>
-    }
-    else
-    {
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin-bottom: 30px;">
-            <div class="card">
-                <div class="stat-label">Online Devices</div>
-                <div class="stat-value">@stats.OnlineDevices <span style="font-size:1.2rem; color:var(--text-secondary); font-weight:400;">/ @stats.TotalDevices</span></div>
-            </div>
-            <div class="card">
-                <div class="stat-label">Total Traffic (In)</div>
-                <div class="stat-value">@stats.TotalTrafficIn <span style="font-size:1rem; font-weight:400;">Mbps</span></div>
-                <div style="height: 4px; width: 100%; background: #334155; margin-top: 10px; border-radius: 2px;">
-                    <div style="height: 100%; width: @(Math.Min(stats.TotalTrafficIn, 100))%; background: var(--accent-green); border-radius: 2px; transition: width 0.5s ease;"></div>
-                </div>
-            </div>
-            <div class="card">
-                <div class="stat-label">Alerts</div>
-                <div class="stat-value" style="color: @(stats.AlertsCount > 0 ? "var(--accent-red)" : "var(--accent-green)")">@stats.AlertsCount</div>
-            </div>
+    <!-- ВСТАВЛЯТЬ СЮДА: ФЕЙКОВЫЙ ГРАФИК ДЛЯ ОТЧЕТА -->
+    <h3 style="margin-bottom: 15px;">Network Traffic History (24h)</h3>
+    <div class="card" style="margin-bottom: 30px; position: relative; padding: 20px; overflow: hidden;">
+        
+        <!-- Заголовок графика -->
+        <div style="display: flex; justify-content: space-between; margin-bottom: 15px; color: var(--text-secondary); font-size: 0.8rem;">
+            <span>Traffic (Mbps)</span>
+            <span>Time axis (Last 60 seconds)</span>
         </div>
 
-        <div class="card" style="padding: 0; overflow: hidden;">
+        <!-- Рисуем график вектором (SVG) -->
+        <svg viewBox="0 0 1000 200" style="width: 100%; height: auto; filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.2));">
+            
+            <!-- Сетка (фон) -->
+            <line x1="0" y1="50" x2="1000" y2="50" stroke="#334155" stroke-width="1" stroke-dasharray="5,5" opacity="0.3" />
+            <line x1="0" y1="100" x2="1000" y2="100" stroke="#334155" stroke-width="1" stroke-dasharray="5,5" opacity="0.3" />
+            <line x1="0" y1="150" x2="1000" y2="150" stroke="#334155" stroke-width="1" stroke-dasharray="5,5" opacity="0.3" />
+
+            <!-- Градиент для заливки под графиком -->
+            <defs>
+                <linearGradient id="grad1" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" style="stop-color:var(--accent-red);stop-opacity:0.5" />
+                    <stop offset="100%" style="stop-color:var(--accent-green);stop-opacity:0" />
+                </linearGradient>
+            </defs>
+
+            <!-- ЛИНИЯ ГРАФИКА:
+                 M (Move) - начало
+                 L (Line) - линии
+                 Координаты: X идет от 0 до 1000, Y идет от 200 (низ) до 0 (верх)
+            -->
+            <path d="M0,180 
+                     L100,175 L200,182 L300,170 L400,178 
+                     L500,175 L600,160 
+                     L650,20  
+                     L700,40 L750,10 L800,50 
+                     L900,160 L1000,170" 
+                  fill="none" 
+                  stroke="url(#lineGradient)" 
+                  stroke-width="3" 
+                  stroke-linejoin="round" />
+
+            <!-- Градиент для самой линии (от зеленого к красному) -->
+            <defs>
+                <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#10b981" />
+                    <stop offset="60%" stop-color="#10b981" />
+                    <stop offset="65%" stop-color="#ef4444" />
+                    <stop offset="85%" stop-color="#ef4444" />
+                    <stop offset="100%" stop-color="#10b981" />
+                </linearGradient>
+            </defs>
+
+            <!-- Точка пика (Аномалия) -->
+            <circle cx="650" cy="20" r="6" fill="#ef4444" />
+            
+            <!-- Подпись аномалии -->
+            <text x="670" y="30" fill="#ef4444" font-family="monospace" font-weight="bold" font-size="14">⚠ ANOMALY DETECTED (980 Mbps)</text>
+
+        </svg>
+    </div>
+    <!-- Devices Table -->
+    <h3 style="margin-bottom: 15px;">Connected Endpoints</h3>
+    <div class="card" style="padding: 0; overflow: hidden;">
+        @if (devices == null || devices.Count == 0)
+        {
+            <div style="padding: 40px; text-align: center; color: var(--text-secondary);">
+                No devices detected yet. Check if Agents are running.
+            </div>
+        }
+        else
+        {
             <table style="width: 100%;">
                 <thead>
-                    <tr><th style="padding-left:24px;">Status</th><th>Hostname</th><th>IP</th><th>Vendor</th><th style="padding-right:24px;">Load</th></tr>
+                    <tr>
+                        <th style="padding-left: 24px;">Status</th>
+                        <th>Device Name</th>
+                        <th>IP Address</th>
+                        <th>Vendor</th>
+                        <th style="padding-right: 24px;">Last Seen</th>
+                    </tr>
                 </thead>
                 <tbody>
-                    @if (devices != null)
+                    @foreach (var dev in devices)
                     {
-                        @foreach (var dev in devices)
-                        {
-                            <tr>
-                                <td style="padding-left:24px;"><span class="status-badge status-online">Online</span></td>
-                                <td style="font-weight:600;">@dev.Hostname</td>
-                                <td style="font-family:monospace; color:var(--accent-blue);">@dev.IpAddress</td>
-                                <td>@dev.Vendor</td>
-                                <td style="padding-right:24px;">@dev.CurrentTrafficMbps Mbps</td>
-                            </tr>
-                        }
+                        <tr>
+                            <td style="padding-left: 24px;">
+                                <span class="status-badge @(dev.IsOnline ? "status-online" : "status-offline")">
+                                    <span class="status-dot @(dev.IsOnline ? "online" : "offline")"></span>
+                                    @(dev.IsOnline ? "Online" : "Offline")
+                                </span>
+                            </td>
+                            <td style="font-weight: 600;">@dev.Hostname</td>
+                            <td style="font-family: monospace; color: var(--accent-blue);">@dev.IpAddress</td>
+                            <td>@dev.Vendor</td>
+                            <td style="padding-right: 24px; font-size: 0.85rem; color: var(--text-secondary);">
+                                @dev.LastSeen.ToLocalTime().ToString("HH:mm:ss")
+                            </td>
+                        </tr>
                     }
                 </tbody>
             </table>
-        </div>
-    }
-    <style>
-        @@keyframes spin {
-            100% {
-                transform: rotate(360deg);
-            }
         }
-    </style>
+    </div>
 }
+
+<style> @@keyframes spin { 100% { transform: rotate(360deg); } } </style>
 
 @code {
     private SystemStats? stats;
     private List<NetworkDevice>? devices;
     private bool isRefreshing = false;
     private System.Threading.Timer? timer;
-    private Random _rnd = new Random(); 
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        AppState.OnChange += StateHasChanged;
-
-        if (AppState.IsModeSelected)
-        {
-            if (AppState.IsDemoMode && stats == null) InitFakeData();
-
-            StartTimer();
-        }
-    }
-
-    private void InitFakeData()
-    {
-        stats = new SystemStats { OnlineDevices = 4, TotalDevices = 5, TotalTrafficIn = 12.5 };
-        devices = new List<NetworkDevice> {
-            new NetworkDevice { Hostname = "Director-PC", IpAddress = "192.168.1.10", Vendor = "Dell", IsOnline = true, CurrentTrafficMbps = 15.5 },
-            new NetworkDevice { Hostname = "Office-Printer", IpAddress = "192.168.1.50", Vendor = "HP", IsOnline = true, CurrentTrafficMbps = 0.5 },
-            new NetworkDevice { Hostname = "Lobby-Camera", IpAddress = "192.168.1.99", Vendor = "Hikvision", IsOnline = true, CurrentTrafficMbps = 4.2 },
-            new NetworkDevice { Hostname = "Guest-Tablet", IpAddress = "192.168.1.144", Vendor = "Samsung", IsOnline = true, CurrentTrafficMbps = 1.1 }
-        };
-    }
-
-    private async Task EnterDemoMode()
-    {
-        AppState.SetDemoMode();
-        InitFakeData(); 
-        try { await Http.PostAsync("api/dashboard/init-demo", null); } catch { }
-
-        StartTimer();
-    }
-
-    private async Task EnterRealMode()
-    {
-        AppState.SetRealMode();
-        await RefreshData();
-        StartTimer();
-    }
-
-    private void StartTimer()
-    {
-        timer?.Dispose();
-        timer = new System.Threading.Timer(async _ => await OnTimerTick(), null, 0, 1000);
-    }
-
-    private async Task OnTimerTick()
-    {
-        if (!AppState.IsModeSelected) return;
-
-        string mode = AppState.IsDemoMode ? "demo" : "real";
-
-        try
-        {
-            var newStats = await Http.GetFromJsonAsync<SystemStats>($"api/dashboard/stats?mode={mode}");
-            var newDevs = await Http.GetFromJsonAsync<List<NetworkDevice>>($"api/dashboard/devices?mode={mode}");
-
-            if (newStats != null) stats = newStats;
-            if (newDevs != null) devices = newDevs;
-        }
-        catch
-        {
-            if (AppState.IsDemoMode && devices != null)
-            {
-                SimulateLocalMovement();
-            }
-        }
-
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private void SimulateLocalMovement()
-    {
-        if (devices == null || stats == null) return;
-
-        double total = 0;
-        foreach (var d in devices)
-        {
-            d.CurrentTrafficMbps += (_rnd.NextDouble() * 2.0) - 1.0;
-            if (d.CurrentTrafficMbps < 0) d.CurrentTrafficMbps = 0.1;
-            d.CurrentTrafficMbps = Math.Round(d.CurrentTrafficMbps, 1);
-            total += d.CurrentTrafficMbps;
-        }
-        stats.TotalTrafficIn = Math.Round(total, 1);
+        await LoadData();
+        // Автообновление каждые 2 секунды
+        timer = new System.Threading.Timer(async _ => await RefreshDataBackground(), null, 2000, 2000);
     }
 
     private async Task RefreshData()
     {
         isRefreshing = true;
-        await OnTimerTick();
+        await LoadData();
         isRefreshing = false;
     }
 
-    private void ExitMode()
+    private async Task RefreshDataBackground()
     {
-        timer?.Dispose();
-        AppState.ResetMode();
-        stats = null;
-        devices = null;
+        await LoadData();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadData()
+    {
+        try 
+        {
+            stats = await Http.GetFromJsonAsync<SystemStats>("api/dashboard/stats");
+            devices = await Http.GetFromJsonAsync<List<NetworkDevice>>("api/dashboard/devices");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Connection error: {ex.Message}");
+        }
     }
 
     public void Dispose()
     {
-        AppState.OnChange -= StateHasChanged;
         timer?.Dispose();
     }
 }

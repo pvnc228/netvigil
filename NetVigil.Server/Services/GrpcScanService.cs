@@ -16,7 +16,7 @@ namespace NetVigil.Server.Services
 
         public override Task<ScanResponse> ReportDevice(DeviceData request, ServerCallContext context)
         {
-            _logger.LogInformation($"gRPC получено устройство: {request.Hostname}");
+            _logger.LogInformation($"gRPC update: {request.Hostname} ({request.IpAddress})");
 
             var deviceModel = new NetVigil.Shared.NetworkDevice
             {
@@ -25,12 +25,13 @@ namespace NetVigil.Server.Services
                 Hostname = request.Hostname,
                 Vendor = request.Vendor,
                 IsOnline = true,
-                CurrentTrafficMbps = 0 
+                CurrentTrafficMbps = 0 // Агент пока не шлет трафик, ставим 0
             };
 
+            // Сохраняем в наше обновленное хранилище
             _sim.UpdateRealDevice(deviceModel);
 
-            return Task.FromResult(new ScanResponse { Success = true, Message = "Данные приняты!" });
+            return Task.FromResult(new ScanResponse { Success = true, Message = "OK" });
         }
     }
 }
