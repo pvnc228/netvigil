@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: netvigil-db
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: password123
+      POSTGRES_USER: postgres
+      POSTGRES_DB: netvigil
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+
+  server:
+    build:
+      context: ..   
+      dockerfile: NetVigil.Server/Dockerfile
+    container_name: netvigil-server
+    ports:
+      - "5000:8080" 
+      - "5002:8081" 
+    depends_on:
+      - timescaledb
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=timescaledb;Database=netvigil;Username=postgres;Password=password123
+  client:
+    build:
+      context: ..   
+      dockerfile: NetVigil.Client/Dockerfile
+    container_name: netvigil-client
+    ports:
+      - "5001:80"
+    depends_on:
+      - server
+
+
+volumes:
+  db-data:
