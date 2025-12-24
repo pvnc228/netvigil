@@ -17,20 +17,19 @@ services:
 
   server:
     build:
-      context: ..   # <--- ВАЖНО: Контекст теперь на уровень выше
+      context: ..   
       dockerfile: NetVigil.Server/Dockerfile
     container_name: netvigil-server
     ports:
-      - "5000:8080"
+      - "5000:8080" 
+      - "5002:8081" 
     depends_on:
       - timescaledb
     environment:
       - ConnectionStrings__DefaultConnection=Host=timescaledb;Database=netvigil;Username=postgres;Password=password123
-      - ASPNETCORE_URLS=http://+:8080
-
   client:
     build:
-      context: ..   # <--- ВАЖНО
+      context: ..   
       dockerfile: NetVigil.Client/Dockerfile
     container_name: netvigil-client
     ports:
@@ -38,15 +37,6 @@ services:
     depends_on:
       - server
 
-  agent:
-    build:
-      context: ..   # <--- ВАЖНО
-      dockerfile: NetVigil.Agent/Dockerfile
-    container_name: netvigil-agent
-    depends_on:
-      - server
-    environment:
-      - SERVER_URL=http://server:8080
 
 volumes:
   db-data:
