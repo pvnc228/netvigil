@@ -221,6 +221,7 @@ namespace NetVigil.Server.Services.Anomaly
         public List<IsolationTree> Trees { get; set; } = new();
         public int SubSampleSize { get; set; }
 
+        public double MbpsMin { get; set; }
         public double MbpsMax { get; set; } = 1;
 
         public IsolationForest() { }
