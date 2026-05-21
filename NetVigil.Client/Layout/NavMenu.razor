@@ -1,0 +1,190 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using NetVigil.Client.Services
+@inject AuthService Auth
+@inject ThemeService Theme
+@inject NavigationManager Nav
+@inject LanguageService Lang
+@inject AppState AppState
+@implements IDisposable
+
+<div class="sidebar">
+    <div class="logo-container">
+        <div class="logo-row">
+            <div class="logo-text-row">
+                <div>
+                    <div class="logo-text">
+                        NET<span class="highlight">VIGIL</span>
+                        <span class="logo-pulse" title="Live"></span>
+                    </div>
+                </div>
+            </div>
+            <button class="theme-toggle" @onclick="ToggleTheme" title="@Lang.T("theme.toggle")">
+                @(Theme.Current == AppTheme.Dark ? "☀" : "🌙")
+            </button>
+        </div>
+    </div>
+
+    <nav class="nav-links">
+        <NavLink class="nav-item" href="" Match="NavLinkMatch.All">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+            @Lang.T("nav.dashboard")
+        </NavLink>
+
+        <NavLink class="nav-item" href="devices">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            @Lang.T("nav.devices")
+        </NavLink>
+
+        <NavLink class="nav-item" href="anomalies">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            <span>@Lang.T("nav.anomalies")</span>
+            @if (AppState.CriticalCount > 0)
+            {
+                <span class="nav-badge">@AppState.CriticalCount</span>
+            }
+        </NavLink>
+
+        <NavLink class="nav-item" href="insights">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><path d="M7 14l4-4 4 4 5-5"></path><circle cx="7" cy="14" r="1.6"></circle><circle cx="11" cy="10" r="1.6"></circle><circle cx="15" cy="14" r="1.6"></circle><circle cx="20" cy="9" r="1.6"></circle></svg>
+            @Lang.T("nav.insights")
+        </NavLink>
+
+        <AuthorizeView Roles="Admin">
+            <Authorized>
+                <NavLink class="nav-item" href="admin">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    @Lang.T("nav.admin")
+                </NavLink>
+                <NavLink class="nav-item" href="settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    @Lang.T("nav.settings")
+                </NavLink>
+            </Authorized>
+        </AuthorizeView>
+
+        <div style="margin-top: auto; padding: 12px;">
+            <AuthorizeView Context="auth">
+                <Authorized>
+                    <NavLink href="profile" style="text-decoration:none; color: inherit;">
+                        <div class="user-profile">
+                            <div class="avatar">@((auth.User.Identity?.Name ?? "?")[..1].ToUpper())</div>
+                            <div>
+                                <div style="font-size: 0.9rem; font-weight:bold;">@auth.User.Identity?.Name</div>
+                                <div style="font-size: 0.7rem; color: var(--text-secondary);">
+                                    @Lang.RoleFromClaim(auth.User.IsInRole("Admin"))
+                                </div>
+                            </div>
+                        </div>
+                    </NavLink>
+                    <button class="logout-btn" @onclick="DoLogout">↩ @Lang.T("nav.logout")</button>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+    </nav>
+</div>
+
+<style>
+    .sidebar {
+        width: 260px;
+        background-color: var(--bg-sidebar);
+        border-right: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        flex-shrink: 0;
+    }
+    .logo-container { padding: 24px 20px; border-bottom: 1px solid var(--border-color); }
+    .logo-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .logo-text-row { display: flex; align-items: center; gap: 8px; }
+    .logo-text { font-size: 1.5rem; font-weight: 800; letter-spacing: 1px; color: var(--text-primary);
+                 display: inline-flex; align-items: center; gap: 8px; }
+    .highlight { color: var(--accent-green); }
+    .logo-pulse {
+        width: 7px; height: 7px; border-radius: 50%;
+        background: var(--accent-green);
+        box-shadow: 0 0 8px rgba(16,185,129,.7);
+        flex-shrink: 0;
+        animation: navPulse 1.4s ease-in-out infinite;
+    }
+    @@keyframes navPulse {
+        0%, 100% { opacity: .35; transform: scale(.85); }
+        50%      { opacity: 1;   transform: scale(1.15); }
+    }
+
+    .nav-badge {
+        margin-left: auto;
+        background: #ef4444;
+        color: #fff;
+        font-size: 0.65rem; font-weight: 700;
+        padding: 1px 7px; border-radius: 9999px;
+        min-width: 20px; text-align: center;
+        line-height: 1.4;
+    }
+
+    .theme-toggle {
+        background: transparent;
+        border: 1px solid var(--border-color);
+        color: var(--text-secondary);
+        width: 34px; height: 34px; border-radius: 8px;
+        cursor: pointer;
+        font-size: 1rem;
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: all 0.15s;
+        flex-shrink: 0;
+    }
+    .theme-toggle:hover { color: var(--accent-green); border-color: var(--accent-green); }
+
+    .nav-links { display: flex; flex-direction: column; padding: 20px 10px; gap: 5px; flex: 1; }
+    .nav-item {
+        display: flex; align-items: center; gap: 12px; padding: 12px 20px;
+        color: var(--text-secondary); text-decoration: none;
+        border-radius: 8px; transition: all 0.2s; font-weight: 500;
+    }
+    .nav-item:hover { background-color: var(--hover-bg); color: var(--text-primary); }
+    .nav-item.active {
+        background-color: rgba(16, 185, 129, 0.12);
+        color: var(--accent-green);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+    .user-profile {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px; background: var(--hover-bg); border-radius: 8px;
+    }
+    .avatar {
+        width: 32px; height: 32px; background: var(--accent-blue); border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: bold; color: white;
+    }
+    .logout-btn {
+        margin-top: 8px; width: 100%;
+        background: transparent; color: var(--text-secondary);
+        border: 1px solid var(--border-color);
+        padding: 8px 12px; border-radius: 8px; cursor: pointer;
+        font-size: 0.85rem;
+    }
+    .logout-btn:hover { color: #ef4444; border-color: #ef4444; }
+</style>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Lang.Changed += OnExt;
+        Theme.Changed += OnExt;
+        AppState.OnChange += OnExt;
+    }
+    public void Dispose()
+    {
+        Lang.Changed -= OnExt;
+        Theme.Changed -= OnExt;
+        AppState.OnChange -= OnExt;
+    }
+    private void OnExt() => InvokeAsync(StateHasChanged);
+
+    private async Task ToggleTheme() => await Theme.ToggleAsync();
+
+    private async Task DoLogout()
+    {
+        await Auth.LogoutAsync();
+        Nav.NavigateTo("login", forceLoad: false);
+    }
+}

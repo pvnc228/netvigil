@@ -1,0 +1,139 @@
+@page "/first-login"
+@layout EmptyLayout
+@attribute [Authorize]
+@using NetVigil.Client.Layout
+@using NetVigil.Client.Services
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject LanguageService Lang
+@inject AuthService Auth
+@implements IDisposable
+
+
+<PageTitle>NetVigil — @Lang.T("first_login.title")</PageTitle>
+
+<div class="login-bg">
+    <form class="login-card" @onsubmit="OnSubmit" @onsubmit:preventDefault>
+        <div class="login-logo">NET<span>VIGIL</span></div>
+        <h2 style="margin: 4px 0 8px; font-weight: 700;">@Lang.T("first_login.title")</h2>
+        <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0 0 18px;">
+            @Lang.T("first_login.subtitle")
+        </p>
+
+        <label class="lbl">@Lang.T("first_login.current")</label>
+        <input class="inp" type="password" @bind="_current" autocomplete="current-password" />
+
+        <label class="lbl">@Lang.T("first_login.new")</label>
+        <input class="inp" type="password" @bind="_new" autocomplete="new-password" />
+
+        <label class="lbl">@Lang.T("first_login.confirm")</label>
+        <input class="inp" type="password" @bind="_confirm" autocomplete="new-password" />
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="err">@_error</div>
+        }
+
+        <button type="submit" class="btn-primary"
+                style="width:100%; justify-content:center; margin-top: 16px;"
+                disabled="@_busy">
+            @if (_busy) { <span>…</span> } else { <span>@Lang.T("first_login.submit")</span> }
+        </button>
+
+        <button type="button" class="btn-link" @onclick="LogoutAsync">
+            @Lang.T("nav.logout")
+        </button>
+    </form>
+</div>
+
+<style>
+    .login-bg {
+        min-height: 100vh; width: 100vw;
+        display: flex; align-items: center; justify-content: center;
+        background: var(--main-bg);
+    }
+    .login-card {
+        background: var(--bg-card); border: 1px solid var(--border-color);
+        border-radius: 14px; padding: 36px 32px; width: 380px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+        display: flex; flex-direction: column;
+    }
+    .login-logo {
+        font-size: 1.4rem; font-weight: 800; letter-spacing: 1px;
+        color: var(--text-primary);
+    }
+    .login-logo span { color: var(--accent-green); }
+    .lbl { color: var(--text-secondary); font-size: 0.85rem; margin-top: 12px; margin-bottom: 4px; }
+    .inp {
+        background: var(--bg-input); border: 1px solid var(--border-color);
+        color: var(--text-primary); padding: 10px 12px;
+        border-radius: 8px; font-size: 0.95rem;
+    }
+    .inp:focus { outline: none; border-color: var(--accent-green); }
+    .err { color: #ef4444; font-size: 0.85rem; margin-top: 10px; }
+    .btn-link {
+        background: none; border: none; color: var(--text-secondary);
+        margin-top: 12px; cursor: pointer; font-size: 0.85rem;
+        text-align: center;
+    }
+    .btn-link:hover { color: var(--text-primary); }
+</style>
+
+@code {
+    private string _current = "";
+    private string _new = "";
+    private string _confirm = "";
+    private string? _error;
+    private bool _busy;
+
+    protected override void OnInitialized() => Lang.Changed += OnLangChanged;
+    public void Dispose() => Lang.Changed -= OnLangChanged;
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task OnSubmit()
+    {
+        _error = null;
+
+        if (string.IsNullOrEmpty(_current) || string.IsNullOrEmpty(_new))
+        {
+            _error = Lang.T("first_login.err.empty");
+            return;
+        }
+        if (_new != _confirm)
+        {
+            _error = Lang.T("first_login.err.mismatch");
+            return;
+        }
+        if (_new == _current)
+        {
+            _error = Lang.T("first_login.err.same");
+            return;
+        }
+        if (_new.Length < 8 || !_new.Any(char.IsLetter) || !_new.Any(char.IsDigit))
+        {
+            _error = Lang.T("first_login.err.weak");
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var resp = await Http.PostAsJsonAsync("api/auth/change-password",
+                new { currentPassword = _current, newPassword = _new });
+            if (!resp.IsSuccessStatusCode)
+            {
+                _error = Lang.T("first_login.err.rejected");
+                return;
+            }
+            await Auth.LogoutAsync();
+            Nav.NavigateTo("/login", forceLoad: false);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task LogoutAsync()
+    {
+        await Auth.LogoutAsync();
+        Nav.NavigateTo("/login", forceLoad: false);
+    }
+}

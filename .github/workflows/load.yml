@@ -1,0 +1,56 @@
+name: load
+
+# Stress test the gRPC ingest path. Manual-only (workflow_dispatch) — runs
+# the full docker-compose stack, points the auxiliary NetVigil.LoadTest tool
+# at it, fails the job if the server can't ack ≥95% of what we sent or if any
+# stream errored. NetVigil.LoadTest is a benchmark utility, not a shipping
+# component — see README §"NetVigil.LoadTest".
+
+on:
+  workflow_dispatch:
+    inputs:
+      devices:
+        description: 'Synthetic device count'
+        default: '200'
+      rate:
+        description: 'Samples per device per second'
+        default: '2'
+      duration:
+        description: 'Duration in seconds'
+        default: '60'
+      concurrency:
+        description: 'Parallel gRPC streams'
+        default: '4'
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Bring up stack (no agent — flooder replaces it)
+        env:
+          NO_AGENT: '1'
+          NO_BROWSER: '1'
+        run: bash scripts/up.sh
+
+      - name: Run load test
+        run: |
+          dotnet run --project NetVigil.LoadTest --configuration Release -- \
+            --target      http://localhost:5002 \
+            --devices     ${{ inputs.devices }} \
+            --rate        ${{ inputs.rate }} \
+            --duration    ${{ inputs.duration }} \
+            --concurrency ${{ inputs.concurrency }}
+
+      - name: Server logs (on failure)
+        if: failure()
+        run: docker compose logs server
+
+      - name: Tear down
+        if: always()
+        run: bash scripts/down.sh

@@ -1,0 +1,215 @@
+@page "/settings"
+@attribute [Authorize]
+@using NetVigil.Shared
+@using NetVigil.Client.Services
+@inject HttpClient Http
+@inject LanguageService Lang
+@implements IDisposable
+
+<PageTitle>NetVigil — @Lang.T("nav.settings")</PageTitle>
+
+<AuthorizeView Roles="Admin" Context="auth">
+    <Authorized>
+        <div style="max-width: 760px;">
+            <h2 style="margin-bottom: 20px;">@Lang.T("settings.title")</h2>
+
+            @if (model is null)
+            {
+                <div class="card" style="color: var(--text-secondary);">@Lang.T("common.loading")</div>
+            }
+            else
+            {
+                <div class="card" style="margin-bottom: 20px;">
+                    <div style="display:flex; align-items:center; justify-content:space-between;">
+                        <h4 style="margin:0;">@Lang.T("settings.telegram")</h4>
+                        <button type="button" class="link-btn" @onclick="ToggleHelp">
+                            @(_helpOpen ? "▴ " : "▾ ")@Lang.T("settings.telegram.help.toggle")
+                        </button>
+                    </div>
+
+                    @if (_helpOpen)
+                    {
+                        <div class="help-box">
+                            <strong>@Lang.T("settings.telegram.help.title")</strong>
+                            <ol class="help-list">
+                                <li>@((MarkupString)Lang.T("settings.telegram.help.step1"))</li>
+                                <li>@((MarkupString)Lang.T("settings.telegram.help.step2"))</li>
+                                <li>@((MarkupString)Lang.T("settings.telegram.help.step3"))</li>
+                                <li>@((MarkupString)Lang.T("settings.telegram.help.step4"))</li>
+                                <li>@((MarkupString)Lang.T("settings.telegram.help.step5"))</li>
+                            </ol>
+                            <div class="help-note">@Lang.T("settings.telegram.help.note")</div>
+                        </div>
+                    }
+
+                    <label class="row">
+                        <input type="checkbox" @bind="model.TelegramEnabled" style="accent-color: var(--accent-green); transform: scale(1.2);" />
+                        <span>@Lang.T("settings.telegram.enabled")</span>
+                    </label>
+
+                    <label class="lbl">@Lang.T("settings.telegram.token")</label>
+                    <input class="inp" type="password" @bind="model.TelegramBotToken" placeholder="123456:ABC..." />
+
+                    <label class="lbl">@Lang.T("settings.telegram.chat")</label>
+                    <input class="inp" type="number" @bind="model.TelegramChatId" />
+
+                    <div style="margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                        <button type="button" class="btn-secondary" @onclick="SendTest" disabled="@_testing">
+                            @if (_testing) { <span>…</span> } else { <span>@Lang.T("settings.telegram.test")</span> }
+                        </button>
+                        @if (_testResult is not null)
+                        {
+                            <span style="color:@(_testOk ? "var(--accent-green)" : "#ef4444"); font-size:0.85rem;">
+                                @(_testOk ? "✓" : "✗") @_testResult
+                            </span>
+                        }
+                    </div>
+                </div>
+
+                <div class="card" style="margin-bottom: 20px;">
+                    <h4 style="margin-top:0;">@Lang.T("settings.detection")</h4>
+
+                    <label class="lbl">@Lang.T("settings.scan_interval")</label>
+                    <input class="inp" type="number" min="5" max="600" @bind="model.ScanIntervalSeconds" />
+
+                    <label class="lbl">@Lang.T("settings.zscore")</label>
+                    <input class="inp" type="number" step="0.1" min="1" max="10" @bind="model.AnomalyThresholdZScore" />
+                </div>
+
+                <button class="btn-primary" @onclick="Save" disabled="@busy">
+                    @if (busy) { <span>…</span> } else { <span>@Lang.T("settings.save")</span> }
+                </button>
+
+                @if (savedAt is not null)
+                {
+                    <span style="margin-left:12px; color: var(--accent-green);">✓ @Lang.T("settings.saved")</span>
+                }
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="card" style="max-width: 600px; color: var(--text-secondary);">
+            @Lang.T("settings.admin_only")
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+<style>
+    .row { display:flex; align-items:center; gap:10px; margin-bottom: 8px; }
+    .lbl { display:block; color: var(--text-secondary); font-size: 0.85rem; margin-top: 12px; margin-bottom: 4px; }
+    .inp {
+        width: 100%; background: var(--bg-input); border: 1px solid var(--border-color);
+        color: var(--text-primary); padding: 10px 12px; border-radius: 6px;
+        box-sizing: border-box;
+    }
+    .link-btn {
+        background: none; border: none; color: var(--text-secondary);
+        cursor: pointer; font-size: 0.85rem; padding: 4px 6px;
+    }
+    .link-btn:hover { color: var(--text-primary); }
+    .btn-secondary {
+        background: transparent; color: var(--text-primary);
+        border: 1px solid var(--border-color);
+        padding: 8px 14px; border-radius: 6px;
+        cursor: pointer; font-size: 0.85rem; transition: all 0.15s;
+    }
+    .btn-secondary:hover { border-color: var(--accent-green); color: var(--accent-green); }
+    .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .help-box {
+        background: var(--bg-input); border: 1px solid var(--border-color);
+        border-radius: 8px; padding: 14px 18px; margin: 12px 0 4px;
+        font-size: 0.88rem; line-height: 1.6;
+    }
+    .help-list { margin: 8px 0 0 0; padding-left: 22px; }
+    .help-list code, .help-box code {
+        background: rgba(148,163,184,0.18); padding: 1px 6px; border-radius: 4px;
+        font-family: monospace; font-size: 0.85rem;
+    }
+    .help-note {
+        margin-top: 10px; padding-top: 10px;
+        border-top: 1px dashed var(--border-color);
+        color: var(--text-secondary); font-size: 0.82rem;
+    }
+</style>
+
+@code {
+    private AppSettings? model;
+    private bool busy;
+    private DateTime? savedAt;
+
+    private bool   _helpOpen;
+    private bool   _testing;
+    private string? _testResult;
+    private bool   _testOk;
+
+    private void ToggleHelp() => _helpOpen = !_helpOpen;
+
+    private async Task SendTest()
+    {
+        _testing = true; _testResult = null;
+        try
+        {
+            var resp = await Http.PostAsync("api/settings/test-telegram", null);
+            if (!resp.IsSuccessStatusCode)
+            {
+                _testOk = false;
+                _testResult = Lang.T("settings.telegram.test.fail");
+                return;
+            }
+            var body = await resp.Content.ReadFromJsonAsync<TestResult>();
+            if (body is { Ok: true })
+            {
+                _testOk = true;
+                _testResult = Lang.T("settings.telegram.test.ok");
+            }
+            else
+            {
+                _testOk = false;
+                _testResult = body?.Error ?? Lang.T("settings.telegram.test.fail");
+            }
+        }
+        catch (Exception ex)
+        {
+            _testOk = false;
+            _testResult = ex.Message;
+        }
+        finally { _testing = false; }
+    }
+
+    private sealed class TestResult
+    {
+        public bool Ok { get; set; }
+        public string? Error { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Lang.Changed += OnLangChanged;
+        await Load();
+    }
+
+    public void Dispose() => Lang.Changed -= OnLangChanged;
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task Load()
+    {
+        try { model = await Http.GetFromJsonAsync<AppSettings>("api/settings"); }
+        catch { model = new AppSettings(); }
+    }
+
+    private async Task Save()
+    {
+        if (model is null) return;
+        busy = true;
+        try
+        {
+            var resp = await Http.PutAsJsonAsync("api/settings", model);
+            if (resp.IsSuccessStatusCode) savedAt = DateTime.UtcNow;
+        }
+        finally
+        {
+            busy = false;
+            await Load();
+        }
+    }
+}

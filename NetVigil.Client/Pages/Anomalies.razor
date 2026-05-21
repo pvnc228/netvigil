@@ -1,0 +1,201 @@
+@page "/anomalies"
+@attribute [Authorize]
+@using NetVigil.Shared
+@using NetVigil.Client.Services
+@inject HttpClient Http
+@inject LanguageService Lang
+@implements IDisposable
+
+<PageTitle>NetVigil — @Lang.T("nav.anomalies")</PageTitle>
+
+<div class="anom-header">
+    <div>
+        <h2 style="margin:0;">@Lang.T("anomalies.page.title")</h2>
+        <div style="color:var(--text-secondary); font-size:0.9rem; margin-top:4px;">
+            @Lang.T("anomalies.page.subtitle")
+        </div>
+    </div>
+    <label class="filter-toggle">
+        <input type="checkbox" @bind="_onlyFlagged" />
+        <span>⚑ @Lang.T("anomalies.filter.only_flagged")</span>
+    </label>
+</div>
+
+<div class="card">
+    @{
+        var visible = FilteredAnomalies();
+    }
+    @if (_loading)
+    {
+        <div class="empty-state">…</div>
+    }
+    else if (visible.Count == 0)
+    {
+        <div class="empty-state">@Lang.T("anomalies.empty")</div>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr>
+                    <th>@Lang.T("anomalies.col.time")</th>
+                    <th>@Lang.T("anomalies.col.device")</th>
+                    <th>Mbps</th>
+                    <th>@Lang.T("anomalies.col.score")</th>
+                    <th>@Lang.T("anomalies.col.severity")</th>
+                    <th style="text-align:right;">@Lang.T("admin.col.actions")</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var a in visible)
+                {
+                    var flagged = IsDeviceFlagged(a.DeviceMac);
+                    <tr>
+                        <td class="text-secondary mono">@a.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        <td class="fw600">
+                            @a.DeviceName
+                            @if (flagged) { <span class="flag-pill">⚑ @Lang.T("anomalies.flagged")</span> }
+                        </td>
+                        <td>@Format.BandwidthText(a.Mbps)</td>
+                        <td class="mono">@a.Score.ToString("F2")</td>
+                        <td><span style="color:@RiskColor(a.Severity); font-weight:600;">@Lang.Severity(a.Severity)</span></td>
+                        <td style="text-align:right;">
+                            <button class="btn-flag @(flagged ? "on" : "")"
+                                    @onclick="@(() => ToggleFlag(a.DeviceMac, !flagged))">
+                                @(flagged ? Lang.T("anomalies.unflag") : Lang.T("anomalies.flag"))
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+<style>
+    .empty-state { padding:36px; text-align:center; color:var(--text-secondary); }
+    .fw600 { font-weight:600; }
+    .mono  { font-family: monospace; }
+    .text-secondary { color: var(--text-secondary); }
+
+    .flag-pill {
+        background: rgba(239,68,68,0.12);
+        color: #ef4444;
+        border: 1px solid rgba(239,68,68,0.4);
+        padding: 2px 8px;
+        border-radius: 9999px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        margin-left: 8px;
+        vertical-align: middle;
+    }
+
+    .btn-flag {
+        background: transparent;
+        color: var(--text-secondary);
+        border: 1px solid var(--border-color);
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        transition: all 0.15s;
+    }
+    .btn-flag:hover { color: #ef4444; border-color: #ef4444; }
+    .btn-flag.on { background: rgba(239,68,68,0.12); color: #ef4444; border-color: rgba(239,68,68,0.4); }
+
+    .anom-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+    .filter-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+        background: var(--bg-card);
+        user-select: none;
+    }
+    .filter-toggle:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+    .filter-toggle input[type="checkbox"] {
+        accent-color: #ef4444;
+        transform: scale(1.1);
+        cursor: pointer;
+    }
+</style>
+
+@code {
+    private List<AnomalyEvent>? _anomalies;
+    private List<NetworkDevice>? _devices;
+    private bool _loading = true;
+    private bool _onlyFlagged;
+    private System.Threading.Timer? _timer;
+
+    private List<AnomalyEvent> FilteredAnomalies()
+    {
+        if (_anomalies is null) return new List<AnomalyEvent>();
+        if (!_onlyFlagged) return _anomalies;
+        return _anomalies.Where(a => IsDeviceFlagged(a.DeviceMac)).ToList();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Lang.Changed += OnLangChanged;
+        await LoadAsync();
+        _loading = false;
+        _timer = new System.Threading.Timer(
+            async _ => { await LoadAsync(); await InvokeAsync(StateHasChanged); },
+            null, 5000, 5000);
+    }
+
+    public void Dispose()
+    {
+        Lang.Changed -= OnLangChanged;
+        _timer?.Dispose();
+    }
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var anoms = Http.GetFromJsonAsync<List<AnomalyEvent>>("api/dashboard/anomalies?limit=200");
+            var devs  = Http.GetFromJsonAsync<List<NetworkDevice>>("api/dashboard/devices");
+            await Task.WhenAll(anoms, devs);
+            _anomalies = anoms.Result;
+            _devices   = devs.Result;
+        }
+        catch (Exception ex) { Console.WriteLine($"[Anomalies] {ex.Message}"); }
+    }
+
+    private bool IsDeviceFlagged(string mac) =>
+        _devices?.FirstOrDefault(d => d.MacAddress == mac)?.IsFlagged ?? false;
+
+    private async Task ToggleFlag(string mac, bool flagged)
+    {
+        try
+        {
+            await Http.PostAsJsonAsync($"api/dashboard/devices/{mac}/flag",
+                new FlagDeviceRequest { IsFlagged = flagged });
+            await LoadAsync();
+        }
+        catch (Exception ex) { Console.WriteLine($"[Anomalies/flag] {ex.Message}"); }
+    }
+
+    private static string RiskColor(RiskLevel r) => r switch
+    {
+        RiskLevel.Critical   => "#ef4444",
+        RiskLevel.Anomalous  => "#f97316",
+        RiskLevel.Suspicious => "#eab308",
+        _                    => "#10b981"
+    };
+}

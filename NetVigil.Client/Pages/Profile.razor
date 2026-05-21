@@ -1,0 +1,140 @@
+@page "/profile"
+@attribute [Authorize]
+@using NetVigil.Client.Services
+@inject HttpClient Http
+@inject ThemeService Theme
+@inject LanguageService Lang
+@implements IDisposable
+
+<PageTitle>NetVigil — @Lang.T("nav.profile")</PageTitle>
+
+<AuthorizeView Context="auth">
+    <Authorized>
+        <div style="max-width: 700px;">
+            <h2 style="margin-bottom: 20px;">@Lang.T("profile.title")</h2>
+
+            <div class="card" style="margin-bottom: 20px;">
+                <div style="display:flex; align-items:center; gap: 20px; margin-bottom: 24px;">
+                    <div style="width: 64px; height: 64px; background: var(--accent-blue); border-radius: 50%;
+                                display:flex; align-items:center; justify-content:center; font-size: 1.6rem; font-weight:bold; color:white;">
+                        @((auth.User.Identity?.Name ?? "?")[..1].ToUpper())
+                    </div>
+                    <div>
+                        <h3 style="margin:0;">@auth.User.Identity?.Name</h3>
+                        <div style="color: var(--text-secondary);">
+                            @Lang.RoleFromClaim(auth.User.IsInRole("Admin"))
+                        </div>
+                    </div>
+                </div>
+
+                <div class="prow">
+                    <div>
+                        <div style="font-weight:600;">@Lang.T("profile.theme")</div>
+                        <div style="font-size:0.85rem; color:var(--text-secondary);">@Lang.T("profile.theme.subtitle")</div>
+                    </div>
+                    <button class="btn-primary" @onclick="ToggleTheme"
+                            style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary);">
+                        @(Theme.Current == AppTheme.Dark ? Lang.T("profile.theme.toLight") : Lang.T("profile.theme.toDark"))
+                    </button>
+                </div>
+
+                <div class="prow">
+                    <div>
+                        <div style="font-weight:600;">@Lang.T("profile.lang")</div>
+                        <div style="font-size:0.85rem; color:var(--text-secondary);">@Lang.T("profile.lang.subtitle")</div>
+                    </div>
+                    <select @bind="selectedLang" @bind:after="OnLangSelected"
+                            style="padding: 8px; border-radius: 6px; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-color);">
+                        @foreach (var l in Lang.Available)
+                        {
+                            <option value="@l.Code">@l.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="card">
+                <h4 style="margin-top:0;">@Lang.T("profile.password")</h4>
+
+                <label class="lbl">@Lang.T("profile.password.current")</label>
+                <input class="inp" type="password" @bind="curPwd" />
+
+                <label class="lbl">@Lang.T("profile.password.new")</label>
+                <input class="inp" type="password" @bind="newPwd" />
+
+                <button class="btn-primary" style="margin-top: 16px;" @onclick="ChangePwd" disabled="@pwdBusy">
+                    @Lang.T("profile.password.submit")
+                </button>
+
+                @if (pwdMessage is not null)
+                {
+                    <div style="margin-top:10px; color: @(pwdOk ? "var(--accent-green)" : "#ef4444");">@pwdMessage</div>
+                }
+            </div>
+        </div>
+    </Authorized>
+</AuthorizeView>
+
+<style>
+    .prow { display:flex; justify-content:space-between; align-items:center; padding: 12px 0; border-top: 1px solid var(--border-color); }
+    .prow:first-of-type { border-top: 0; }
+    .lbl { display:block; color: var(--text-secondary); font-size: 0.85rem; margin-top: 12px; margin-bottom: 4px; }
+    .inp {
+        width: 100%; background: var(--bg-input); border: 1px solid var(--border-color);
+        color: var(--text-primary); padding: 10px 12px; border-radius: 6px;
+        box-sizing: border-box;
+    }
+</style>
+
+@code {
+    private string selectedLang = "en";
+    private string curPwd = "";
+    private string newPwd = "";
+    private bool pwdBusy;
+    private bool pwdOk;
+    private string? pwdMessage;
+
+    protected override void OnInitialized()
+    {
+        selectedLang = Lang.Current;
+        Lang.Changed += OnExtChanged;
+        Theme.Changed += OnExtChanged;
+    }
+
+    public void Dispose()
+    {
+        Lang.Changed -= OnExtChanged;
+        Theme.Changed -= OnExtChanged;
+    }
+
+    private void OnExtChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task ToggleTheme() => await Theme.ToggleAsync();
+
+    private async Task OnLangSelected() => await Lang.SetAsync(selectedLang);
+
+    private async Task ChangePwd()
+    {
+        pwdBusy = true;
+        pwdMessage = null;
+        try
+        {
+            var resp = await Http.PostAsJsonAsync("api/auth/change-password", new { currentPassword = curPwd, newPassword = newPwd });
+            if (resp.IsSuccessStatusCode)
+            {
+                pwdOk = true;
+                pwdMessage = Lang.T("profile.password.ok");
+                curPwd = ""; newPwd = "";
+            }
+            else
+            {
+                pwdOk = false;
+                pwdMessage = Lang.T("profile.password.bad");
+            }
+        }
+        finally
+        {
+            pwdBusy = false;
+        }
+    }
+}

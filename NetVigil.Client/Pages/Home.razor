@@ -1,0 +1,503 @@
+@page "/"
+@attribute [Authorize]
+@using NetVigil.Shared
+@using NetVigil.Client.Services
+@inject HttpClient Http
+@inject LanguageService Lang
+@inject DashboardHubClient Hub
+@implements IDisposable
+
+<PageTitle>NetVigil — Dashboard</PageTitle>
+
+@if (_loading)
+{
+    <div class="splash">
+        <div class="splash-dot"></div>
+        <div class="splash-dot"></div>
+        <div class="splash-dot"></div>
+    </div>
+}
+else
+{
+    <!-- ── Header ── -->
+    <div class="dash-header">
+        <div>
+            <h2 class="dash-title">@Lang.T("nav.dashboard")</h2>
+            <div class="dash-sub">@Lang.T("dashboard.subtitle") · @(_updatedAt?.ToLocalTime().ToString("HH:mm:ss") ?? "—")</div>
+        </div>
+        <button class="btn-primary" @onclick="RefreshAsync" disabled="@_busy">
+            <span class="@(_busy ? "spin" : "")">↻</span>
+            @(_busy ? Lang.T("dashboard.scanning") : Lang.T("dashboard.refresh"))
+        </button>
+    </div>
+
+    <!-- ── Stat cards ── -->
+    <div class="stat-grid">
+        <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(59,130,246,.15); color:#3b82f6;">⬡</div>
+            <div>
+                <div class="stat-label">@Lang.T("stats.devices")</div>
+                <div class="stat-value">
+                    @(_stats?.OnlineDevices ?? 0)
+                    <span class="stat-total">/ @(_stats?.TotalDevices ?? 0)</span>
+                </div>
+            </div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(16,185,129,.15); color:#10b981;">↑↓</div>
+            <div>
+                <div class="stat-label">@Lang.T("stats.traffic")</div>
+                <div class="stat-value">
+                    @Format.BandwidthValue(_stats?.TotalTrafficIn ?? 0)
+                    <span class="stat-unit">@Format.BandwidthUnit(_stats?.TotalTrafficIn ?? 0)</span>
+                </div>
+            </div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(234,179,8,.15); color:#eab308;">⚠</div>
+            <div>
+                <div class="stat-label">@Lang.T("stats.anomalies")</div>
+                <div class="stat-value" style="color:@(_stats?.AnomaliesLast24h > 0 ? "#eab308" : "inherit")">
+                    @(_stats?.AnomaliesLast24h ?? 0)
+                </div>
+            </div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(239,68,68,.15); color:#ef4444;">!</div>
+            <div>
+                <div class="stat-label">@Lang.T("stats.critical")</div>
+                <div class="stat-value" style="color:@(_stats?.CriticalDevices > 0 ? "#ef4444" : "inherit")">
+                    @(_stats?.CriticalDevices ?? 0)
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Traffic chart ── -->
+    <div class="card chart-card @(_chartFull ? "chart-card-full" : "")">
+        <div class="chart-header">
+            <span class="chart-title">@Lang.T("chart.title")</span>
+            @if (_chart != null)
+            {
+                <span class="chart-now" style="color:@(_chart.CurrentAnomalous ? "#ef4444" : "#10b981")">
+                    @Format.BandwidthText(_chart.CurrentMbps)
+                    @if (_chart.CurrentAnomalous) { <span class="anomaly-badge">⚠ @Lang.T("chart.anomaly_badge")</span> }
+                </span>
+            }
+            <span class="chart-range">@Lang.T("chart.range")</span>
+            <button class="chart-fs-btn"
+                    @onclick="ToggleChartFullscreen"
+                    title="@(_chartFull ? Lang.T("chart.exit_full") : Lang.T("chart.full"))">
+                @(_chartFull ? "⤡" : "⛶")
+            </button>
+        </div>
+
+        @if (_chart == null)
+        {
+            <div class="chart-empty">@Lang.T("chart.waiting")</div>
+        }
+        else
+        {
+            <svg viewBox="0 0 1000 180" preserveAspectRatio="none"
+                 class="@(_chartFull ? "chart-svg chart-svg-full" : "chart-svg")"
+                 aria-hidden="true">
+                <defs>
+                    <linearGradient id="cg-n" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#10b981" stop-opacity="0.25"/>
+                        <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+                    </linearGradient>
+                    <linearGradient id="cg-a" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#ef4444" stop-opacity="0.25"/>
+                        <stop offset="100%" stop-color="#ef4444" stop-opacity="0"/>
+                    </linearGradient>
+                </defs>
+
+                <!-- Grid -->
+                <line x1="0" y1="10"  x2="1000" y2="10"  stroke="var(--grid-stroke)" stroke-width="1" stroke-dasharray="4,4"/>
+                <line x1="0" y1="85"  x2="1000" y2="85"  stroke="var(--grid-stroke)" stroke-width="1" stroke-dasharray="4,4"/>
+                <line x1="0" y1="165" x2="1000" y2="165" stroke="var(--grid-stroke)" stroke-width="1" stroke-dasharray="4,4"/>
+
+                <!-- Y labels (auto-scaled units) -->
+                <text x="4" y="9"   fill="var(--text-muted)" font-size="9" font-family="monospace">@Format.BandwidthText(_chart.MaxMbps)</text>
+                <text x="4" y="84"  fill="var(--text-muted)" font-size="9" font-family="monospace">@Format.BandwidthText(_chart.MaxMbps / 2)</text>
+                <text x="4" y="164" fill="var(--text-muted)" font-size="9" font-family="monospace">0</text>
+
+                <!-- Fill (always neutral; anomaly state is conveyed by line segments and dots) -->
+                <path d="@_chart.FillPath" fill="url(#cg-n)"/>
+
+                <!-- Colored line segments -->
+                @foreach (var seg in _chart.Segments)
+                {
+                    <path d="@seg.Path" fill="none" stroke="@seg.Color"
+                          stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                }
+
+                <!-- Anomaly dots -->
+                @foreach (var m in _chart.Markers)
+                {
+                    <circle cx="@m.X.ToString("F0")" cy="@m.Y.ToString("F0")"
+                            r="5" fill="#ef4444" opacity="0.9">
+                        <title>⚠ @m.Label</title>
+                    </circle>
+                }
+            </svg>
+        }
+    </div>
+
+    <!-- ── Devices + Anomalies ── -->
+    <div class="bottom-grid">
+        <!-- Devices -->
+        <div class="devices-col">
+            <h3 class="section-title">@Lang.T("devices.title")</h3>
+            <div class="card table-card">
+                @if (_devices == null || _devices.Count == 0)
+                {
+                    <div class="table-empty">@Lang.T("devices.empty")</div>
+                }
+                else
+                {
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>@Lang.T("devices.col.status")</th>
+                                <th>@Lang.T("devices.col.name")</th>
+                                <th>@Lang.T("devices.col.ip")</th>
+                                <th>@Lang.T("devices.col.vendor")</th>
+                                <th>@Lang.T("devices.col.seen")</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var d in _devices)
+                            {
+                                <tr>
+                                    <td>
+                                        <span class="status-badge @(d.IsOnline ? "status-online" : "status-offline")">
+                                            <span class="dot"></span>
+                                            @(d.IsOnline ? Lang.T("devices.online") : Lang.T("devices.offline"))
+                                        </span>
+                                    </td>
+                                    <td class="fw600">
+                                        @d.Hostname
+                                        @if (d.IsFlagged) { <span class="flag-pill">⚑ @Lang.T("devices.flagged")</span> }
+                                    </td>
+                                    <td class="mono accent-blue">@d.IpAddress</td>
+                                    <td class="text-secondary">@d.Vendor</td>
+                                    <td class="text-secondary">@d.LastSeen.ToLocalTime().ToString("HH:mm:ss")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+
+        <!-- Anomalies (compact) -->
+        <div class="anom-col">
+            <h3 class="section-title">@Lang.T("anomalies.title")</h3>
+            <div class="card anom-card">
+                @{
+                    var top = _anomalies?.Take(3).ToList() ?? new();
+                    var totalAnoms = _anomalies?.Count ?? 0;
+                }
+                @if (totalAnoms == 0)
+                {
+                    <div class="anom-empty">
+                        <div class="anom-empty-icon">✓</div>
+                        <div class="anom-empty-text">@Lang.T("anomalies.empty")</div>
+                    </div>
+                }
+                else
+                {
+                    <ul class="anom-list">
+                        @foreach (var a in top)
+                        {
+                            <li class="anom-row">
+                                <span class="anom-dot" style="background:@RiskColor(a.Severity)"></span>
+                                <div class="anom-main">
+                                    <div class="anom-title">
+                                        <span class="fw600">@a.DeviceName</span>
+                                        <span class="anom-sev" style="color:@RiskColor(a.Severity)">@Lang.Severity(a.Severity)</span>
+                                    </div>
+                                    <div class="anom-meta">
+                                        <span class="mono">@a.Timestamp.ToLocalTime().ToString("HH:mm:ss")</span>
+                                        · @Format.BandwidthText(a.Mbps)
+                                    </div>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                    <a class="anom-cta" href="anomalies">
+                        @if (totalAnoms > top.Count)
+                        {
+                            <span>@string.Format(Lang.T("anomalies.cta.more"), totalAnoms - top.Count)</span>
+                        }
+                        else
+                        {
+                            <span>@Lang.T("anomalies.cta.open")</span>
+                        }
+                        <span aria-hidden="true">→</span>
+                    </a>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .splash { display:flex; gap:8px; justify-content:center; align-items:center; height:60vh; }
+    .splash-dot { width:10px; height:10px; border-radius:50%; background:var(--accent-green);
+                  animation:pulse 1.2s ease-in-out infinite; }
+    .splash-dot:nth-child(2) { animation-delay:.2s; }
+    .splash-dot:nth-child(3) { animation-delay:.4s; }
+    @@keyframes pulse { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1.2)} }
+    @@keyframes spin   { 100%{ transform:rotate(360deg); } }
+    .spin { display:inline-block; animation:spin .8s linear infinite; }
+
+    .dash-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:28px; }
+    .dash-title  { margin:0; font-size:1.6rem; font-weight:700; }
+    .dash-sub    { color:var(--text-secondary); font-size:0.85rem; margin-top:4px; }
+
+    .stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; margin-bottom:24px; }
+    @@media(max-width:900px){ .stat-grid{grid-template-columns:repeat(2,1fr);} }
+    @@media(max-width:500px){ .stat-grid{grid-template-columns:1fr;} }
+
+    .stat-card  { display:flex; align-items:center; gap:16px; }
+    .stat-icon  { width:44px; height:44px; border-radius:10px; display:flex;
+                  align-items:center; justify-content:center; font-size:1.2rem; flex-shrink:0; }
+    .stat-label { color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase;
+                  letter-spacing:.05em; margin-bottom:4px; }
+    .stat-value { font-size:1.7rem; font-weight:700; line-height:1; }
+    .stat-total { font-size:1rem; font-weight:400; color:var(--text-secondary); }
+    .stat-unit  { font-size:0.9rem; font-weight:400; color:var(--text-secondary); }
+
+    .chart-card   { margin-bottom:24px; padding:20px; }
+    .chart-header { display:flex; align-items:center; gap:16px; margin-bottom:14px; flex-wrap:wrap; }
+    .chart-title  { font-weight:600; font-size:0.95rem; }
+    .chart-now    { font-size:1.05rem; font-weight:700; margin-left:auto; }
+    .chart-range  { font-size:0.8rem; color:var(--text-secondary); }
+    .chart-empty  { color:var(--text-secondary); text-align:center; padding:40px; }
+    .chart-svg    { width:100%; height:auto; overflow:visible; }
+    .anomaly-badge{ background:#ef444420; color:#ef4444; border:1px solid #ef444440;
+                    font-size:.7rem; padding:2px 8px; border-radius:9999px;
+                    font-weight:600; margin-left:6px; vertical-align:middle; }
+
+    .chart-fs-btn {
+        background: transparent;
+        border: 1px solid var(--border-color);
+        color: var(--text-secondary);
+        width: 30px; height: 30px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 1rem;
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: all 0.15s;
+        flex-shrink: 0;
+    }
+    .chart-fs-btn:hover { color: var(--accent-green); border-color: var(--accent-green); }
+
+    /* Fullscreen mode — fills the entire web page (not the physical screen). */
+    .chart-card-full {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        margin: 0;
+        border-radius: 0;
+        padding: 24px;
+        background: var(--bg-card);
+        display: flex;
+        flex-direction: column;
+    }
+    .chart-card-full .chart-svg-full {
+        flex: 1;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+    }
+
+    .bottom-grid  { display:grid; grid-template-columns:2fr 1fr; gap:24px; align-items:start; }
+    @@media(max-width:900px){ .bottom-grid{grid-template-columns:1fr;} }
+    .section-title{ margin:0 0 12px; font-size:1rem; font-weight:600; }
+    .table-card   { padding:0; overflow:hidden; }
+    .table-empty  { padding:36px; text-align:center; color:var(--text-secondary); }
+
+    /* Compact anomalies side-card */
+    .anom-card    { padding:12px; }
+    .anom-list    { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+    .anom-row     { display:flex; align-items:flex-start; gap:10px; padding:10px 8px;
+                    border-radius:8px; transition:background .15s; }
+    .anom-row:hover { background: var(--hover-bg); }
+    .anom-dot     { width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:6px; }
+    .anom-main    { flex:1; min-width:0; }
+    .anom-title   { display:flex; justify-content:space-between; gap:8px;
+                    font-size:0.9rem; }
+    .anom-sev     { font-size:0.7rem; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+    .anom-meta    { color:var(--text-secondary); font-size:0.75rem; margin-top:2px; }
+    .anom-cta     { display:flex; align-items:center; justify-content:space-between;
+                    margin-top:8px; padding:10px 12px;
+                    color:var(--accent-green); text-decoration:none;
+                    border-top:1px solid var(--border-color);
+                    font-size:0.85rem; font-weight:600;
+                    transition:color .15s; }
+    .anom-cta:hover { color: var(--accent-green-hover); }
+    .anom-empty   { padding:36px 20px; text-align:center; }
+    .anom-empty-icon { font-size:2rem; color:var(--accent-green); margin-bottom:8px; }
+    .anom-empty-text { color:var(--text-secondary); font-size:0.9rem; }
+
+    .fw600 { font-weight:600; }
+    .mono  { font-family:monospace; }
+    .accent-blue   { color:var(--accent-blue); }
+    .text-secondary{ color:var(--text-secondary); }
+
+    .dot { width:6px; height:6px; border-radius:50%; background:currentColor;
+           display:inline-block; margin-right:5px; }
+
+    .flag-pill {
+        background: rgba(239,68,68,0.12);
+        color: #ef4444;
+        border: 1px solid rgba(239,68,68,0.4);
+        padding: 1px 6px;
+        border-radius: 9999px;
+        font-size: 0.65rem;
+        font-weight: 600;
+        margin-left: 6px;
+        vertical-align: middle;
+    }
+</style>
+
+@code {
+    private SystemStats?         _stats;
+    private List<NetworkDevice>? _devices;
+    private List<AnomalyEvent>?  _anomalies;
+    private ChartData?           _chart;
+    private DateTime?            _updatedAt;
+    private bool                 _loading = true;
+    private bool                 _busy;
+    private bool                 _chartFull;
+    private void ToggleChartFullscreen() => _chartFull = !_chartFull;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        Lang.Changed += OnLangChanged;
+        Hub.OnSnapshot += HandleSnapshot;
+
+        if (Hub.Latest is not null) ApplySnapshot(Hub.Latest);
+        else await LoadAllAsync(); 
+
+        _loading = false;
+        await Hub.StartAsync();
+    }
+
+    public void Dispose()
+    {
+        Lang.Changed -= OnLangChanged;
+        Hub.OnSnapshot -= HandleSnapshot;
+    }
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    private void HandleSnapshot(DashboardSnapshot snap)
+    {
+        ApplySnapshot(snap);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ApplySnapshot(DashboardSnapshot snap)
+    {
+        _stats     = snap.Stats;
+        _devices   = snap.Devices;
+        _anomalies = snap.Anomalies;
+        _chart     = BuildChart(snap.Traffic);
+        _updatedAt = snap.SnapshotAt;
+    }
+
+    private async Task RefreshAsync()
+    {
+        _busy = true;
+        await LoadAllAsync();
+        _busy = false;
+    }
+
+    private async Task LoadAllAsync()
+    {
+        try
+        {
+            _stats     = await Http.GetFromJsonAsync<SystemStats>("api/dashboard/stats");
+            _devices   = await Http.GetFromJsonAsync<List<NetworkDevice>>("api/dashboard/devices");
+            _anomalies = await Http.GetFromJsonAsync<List<AnomalyEvent>>("api/dashboard/anomalies?limit=20");
+            var history = await Http.GetFromJsonAsync<List<TrafficPoint>>("api/dashboard/traffic-history?minutes=5");
+            _chart     = BuildChart(history);
+            _updatedAt = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[NetVigil] Load error: {ex.Message}");
+        }
+    }
+
+
+    private record ChartSegment(string Path, string Color);
+    private record ChartMarker(double X, double Y, string Label);
+    private record ChartData(
+        double MaxMbps,
+        double CurrentMbps,
+        bool   CurrentAnomalous,
+        string FillPath,
+        List<ChartSegment> Segments,
+        List<ChartMarker>  Markers);
+
+    private static ChartData? BuildChart(List<TrafficPoint>? pts)
+    {
+        if (pts is null || pts.Count < 2) return null;
+
+        int    n   = pts.Count;
+        double max = Math.Max(0.001, pts.Max(p => p.Mbps));
+
+        static double Px(int i, int n)       => n > 1 ? (1000.0 * i) / (n - 1) : 500;
+        static double Py(double v, double m) => 165 - (v / m) * 155;
+
+        var fill = new System.Text.StringBuilder();
+        fill.Append($"M{Px(0, n):F0},165 ");
+        for (int i = 0; i < n; i++)
+            fill.Append($"L{Px(i, n):F0},{Py(pts[i].Mbps, max):F0} ");
+        fill.Append($"L{Px(n - 1, n):F0},165 Z");
+
+        var segments = new List<ChartSegment>();
+        var sb  = new System.Text.StringBuilder();
+        bool cur = pts[0].IsAnomalous;
+        sb.Append($"M{Px(0, n):F0},{Py(pts[0].Mbps, max):F0}");
+        for (int i = 1; i < n; i++)
+        {
+            if (pts[i].IsAnomalous != cur)
+            {
+                segments.Add(new(sb.ToString(), cur ? "#ef4444" : "#10b981"));
+                sb.Clear();
+                sb.Append($"M{Px(i - 1, n):F0},{Py(pts[i - 1].Mbps, max):F0}");
+                cur = pts[i].IsAnomalous;
+            }
+            sb.Append($" L{Px(i, n):F0},{Py(pts[i].Mbps, max):F0}");
+        }
+        if (sb.Length > 0) segments.Add(new(sb.ToString(), cur ? "#ef4444" : "#10b981"));
+
+        var markers = pts
+            .Select((p, i) => (p, i))
+            .Where(t => t.p.IsAnomalous)
+            .Select(t => new ChartMarker(
+                Px(t.i, n), Py(t.p.Mbps, max),
+                $"{t.p.Mbps:F1} Mbps @ {t.p.Timestamp.ToLocalTime():HH:mm:ss}"))
+            .ToList();
+
+        var last = pts.Last();
+        return new ChartData(max, last.Mbps, last.IsAnomalous,
+                             fill.ToString(), segments, markers);
+    }
+
+
+    private static string RiskColor(RiskLevel r) => r switch
+    {
+        RiskLevel.Critical   => "#ef4444",
+        RiskLevel.Anomalous  => "#f97316",
+        RiskLevel.Suspicious => "#eab308",
+        _                    => "#10b981"
+    };
+}

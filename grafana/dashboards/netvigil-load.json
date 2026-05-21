@@ -1,0 +1,267 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "uid": "netvigil-load",
+  "title": "NetVigil - Load Test Demo",
+  "tags": ["netvigil", "load", "timescale"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-5m", "to": "now" },
+  "timepicker": { "refresh_intervals": ["1s", "5s", "10s", "30s", "1m"] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Total samples in TimescaleDB",
+      "datasource": { "type": "postgres", "uid": "netvigil-timescale" },
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100000 },
+              { "color": "red", "value": 1000000 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "netvigil-timescale" },
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS total FROM \"TrafficSamples\"",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Active devices (last 60s)",
+      "datasource": { "type": "postgres", "uid": "netvigil-timescale" },
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "green", "value": 50 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "netvigil-timescale" },
+          "format": "table",
+          "rawSql": "SELECT COUNT(DISTINCT \"DeviceMac\") AS devices FROM \"TrafficSamples\" WHERE \"Timestamp\" > NOW() - INTERVAL '60 seconds'",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Anomalies (last 5 min)",
+      "datasource": { "type": "postgres", "uid": "netvigil-timescale" },
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 5 },
+              { "color": "red", "value": 20 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "netvigil-timescale" },
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS anomalies FROM \"Anomalies\" WHERE \"Timestamp\" > NOW() - INTERVAL '5 minutes'",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Ingest rate - samples per second",
+      "datasource": { "type": "postgres", "uid": "netvigil-timescale" },
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "short"
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "single", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "netvigil-timescale" },
+          "format": "time_series",
+          "rawSql": "SELECT time_bucket('1 second', \"Timestamp\") AS time, COUNT(*)::float AS samples_per_sec FROM \"TrafficSamples\" WHERE $__timeFilter(\"Timestamp\") GROUP BY time ORDER BY time",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Aggregate Mbps across all devices",
+      "datasource": { "type": "postgres", "uid": "netvigil-timescale" },
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 30,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "Mbits"
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "single", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "netvigil-timescale" },
+          "format": "time_series",
+          "rawSql": "SELECT time_bucket('5 seconds', \"Timestamp\") AS time, SUM(\"Mbps\") AS total_mbps FROM \"TrafficSamples\" WHERE $__timeFilter(\"Timestamp\") GROUP BY time ORDER BY time",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Anomalies per minute (by severity)",
+      "datasource": { "type": "postgres", "uid": "netvigil-timescale" },
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "stacking": { "mode": "normal", "group": "A" }
+          },
+          "unit": "short"
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "right", "showLegend": true, "calcs": ["sum"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "netvigil-timescale" },
+          "format": "time_series",
+          "rawSql": "SELECT time_bucket('1 minute', \"Timestamp\") AS time, CASE \"Severity\" WHEN 1 THEN 'Suspicious' WHEN 2 THEN 'Anomalous' WHEN 3 THEN 'Critical' ELSE 'Normal' END AS metric, COUNT(*)::float AS value FROM \"Anomalies\" WHERE $__timeFilter(\"Timestamp\") GROUP BY time, \"Severity\" ORDER BY time",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Top 10 devices by Mbps (last 1 min)",
+      "datasource": { "type": "postgres", "uid": "netvigil-timescale" },
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 50 },
+              { "color": "red", "value": 200 }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "avg_mbps" },
+            "properties": [
+              { "id": "unit", "value": "Mbits" },
+              { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "gradient" } }
+            ]
+          }
+        ]
+      },
+      "options": { "showHeader": true },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "netvigil-timescale" },
+          "format": "table",
+          "rawSql": "SELECT \"DeviceMac\" AS device_mac, COUNT(*) AS samples, AVG(\"Mbps\")::numeric(10,2) AS avg_mbps, MAX(\"Mbps\")::numeric(10,2) AS peak_mbps FROM \"TrafficSamples\" WHERE \"Timestamp\" > NOW() - INTERVAL '60 seconds' GROUP BY \"DeviceMac\" ORDER BY avg_mbps DESC LIMIT 10",
+          "rawQuery": true
+        }
+      ]
+    }
+  ]
+}

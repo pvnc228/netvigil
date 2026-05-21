@@ -1,0 +1,11 @@
+@inject NavigationManager Nav
+
+@code {
+    protected override void OnInitialized()
+    {
+        if (!Nav.Uri.Contains("/login", StringComparison.OrdinalIgnoreCase))
+        {
+            Nav.NavigateTo("login", forceLoad: false);
+        }
+    }
+}

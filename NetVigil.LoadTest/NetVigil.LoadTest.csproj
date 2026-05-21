@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Auxiliary tool, not part of the shipping product. Synthetic gRPC ingest
+    flooder used during performance iterations (see README §"NetVigil.LoadTest").
+    Excluded from container builds and deploy targets on purpose.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>NetVigil.LoadTest</RootNamespace>
+    <Description>NetVigil benchmarking flooder — auxiliary, not a shipping component.</Description>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NetVigil.Shared\NetVigil.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

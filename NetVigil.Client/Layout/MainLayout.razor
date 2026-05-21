@@ -1,0 +1,278 @@
+@inherits LayoutComponentBase
+@using NetVigil.Client.Services
+@inject NetVigil.Client.Services.LanguageService Lang
+@inject NetVigil.Client.Services.AppState AppState
+@inject NavigationManager Nav
+@inject HttpClient Http
+@inject AuthService Auth
+@implements IDisposable
+
+<div class="page">
+    <NavMenu />
+
+    <main>
+        <header class="topbar">
+            <div class="topbar-left">
+                <div class="topbar-title">@PageTitle()</div>
+                <div class="topbar-sub">@DateTime.Now.ToLongDateString()</div>
+            </div>
+            <div class="topbar-right">
+                @{
+                    var agents = AppState.Agents;
+                }
+                @if (agents.Count == 0)
+                {
+                    <span class="topbar-net topbar-net-off" title="@Lang.T("topbar.no_agent.tip")">
+                        <span class="topbar-net-icon">⌀</span>
+                        @Lang.T("topbar.no_agent")
+                    </span>
+                }
+                else if (agents.Count == 1)
+                {
+                    var a = agents[0];
+                    var port = ExtractPort(a.GrpcTarget);
+                    var modeClass = a.Mode?.ToLowerInvariant() switch
+                    {
+                        "gatewaysniffer" => "topbar-net-sniffer",
+                        "synthetic"      => "topbar-net-synth",
+                        _                => "topbar-net-arp"
+                    };
+                    <span class="topbar-net @modeClass"
+                          title="@($"{a.Hostname} · {a.InterfaceDesc} · {a.Mode} · gRPC {a.GrpcTarget}")">
+                        <span class="topbar-net-icon">◉</span>
+                        <span class="topbar-net-cidr">@a.SubnetCidr</span>
+                        <span class="topbar-net-sep">·</span>
+                        <span class="topbar-net-iface">@a.InterfaceName</span>
+                        @if (!string.IsNullOrEmpty(port))
+                        {
+                            <span class="topbar-net-sep">·</span>
+                            <span class="topbar-net-port">:@port</span>
+                        }
+                    </span>
+                }
+                else
+                {
+                    <span class="topbar-net topbar-net-arp"
+                          title="@string.Join("\n", agents.Select(a => $"{a.Hostname}: {a.SubnetCidr} · {a.InterfaceName} · {a.Mode}"))">
+                        <span class="topbar-net-icon">◉</span>
+                        @agents.Count @Lang.T("topbar.agents")
+                    </span>
+                }
+
+                @if (AppState.CriticalCount > 0)
+                {
+                    <button type="button" class="topbar-pill" @onclick="GoToAnomalies">
+                        <span class="topbar-pill-dot"></span>
+                        @AppState.CriticalCount @Lang.T("topbar.critical")
+                    </button>
+                }
+                <!-- <span class="topbar-divider"></span>
+                <span class="topbar-clock">@_now.ToString("HH:mm:ss")</span> -->
+            </div>
+        </header>
+
+        @* ErrorBoundary catches uncaught exceptions in any child page so a
+           bad render in one tab doesn't take down the whole shell. The error
+           UI stays inside <main>, so the sidebar/nav remains usable and the
+           user can navigate to a working page. *@
+        <ErrorBoundary @ref="_boundary">
+            <ChildContent>
+                <div class="page-content">@Body</div>
+            </ChildContent>
+            <ErrorContent Context="ex">
+                <div style="padding:24px; max-width:720px;">
+                    <h2 style="margin:0 0 8px 0; color: var(--danger, #d33);">
+                        @Lang.T("common.error")
+                    </h2>
+                    <p style="color: var(--text-secondary);">@Lang.T("common.error_help")</p>
+                    <pre style="background: var(--surface-2, #222); padding:12px; border-radius:6px; overflow:auto; white-space:pre-wrap;">@ex.Message</pre>
+                    <button class="btn" @onclick="Recover">@Lang.T("common.retry")</button>
+                </div>
+            </ErrorContent>
+        </ErrorBoundary>
+    </main>
+</div>
+
+<style>
+    main { display: flex; flex-direction: column; padding: 0; }
+
+    .topbar {
+        height: 52px;
+        flex-shrink: 0;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0 24px;
+        background: var(--bg-card);
+        border-bottom: 1px solid var(--border-color);
+    }
+    .topbar-left { display: flex; flex-direction: column; min-width: 0; }
+    .topbar-title { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
+    .topbar-sub   { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;
+                    text-transform: capitalize; }
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+
+    .topbar-pill {
+        display: inline-flex; align-items: center; gap: 7px;
+        background: rgba(239,68,68,0.1);
+        border: 1px solid rgba(239,68,68,0.3);
+        color: #ef4444;
+        padding: 5px 11px; border-radius: 7px;
+        font-size: 0.78rem; font-weight: 600;
+        cursor: pointer; font-family: inherit;
+        transition: background 0.15s;
+    }
+    .topbar-pill:hover { background: rgba(239,68,68,0.18); }
+    .topbar-pill-dot {
+        width: 6px; height: 6px; border-radius: 50%;
+        background: #ef4444; flex-shrink: 0;
+        animation: topbarPulse 1.4s ease-in-out infinite;
+    }
+    @@keyframes topbarPulse {
+        0%, 100% { opacity: .35; transform: scale(.85); }
+        50%      { opacity: 1;   transform: scale(1.15); }
+    }
+
+    .topbar-divider {
+        width: 1px; height: 24px; background: var(--border-color);
+    }
+    .topbar-clock {
+        font-size: 0.8rem; color: var(--text-secondary); font-family: monospace;
+    }
+
+    .topbar-net {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 4px 10px; border-radius: 7px;
+        font-size: 0.76rem; font-weight: 500;
+        font-family: monospace;
+        cursor: default; user-select: text;
+    }
+    .topbar-net-icon { font-size: 0.7rem; line-height: 1; }
+    .topbar-net-sep  { opacity: 0.5; }
+    .topbar-net-cidr { font-weight: 600; }
+    .topbar-net-iface { color: var(--text-secondary); }
+    .topbar-net-port  { color: var(--text-secondary); }
+
+    .topbar-net-arp {
+        background: rgba(34, 197, 94, 0.10);
+        border: 1px solid rgba(34, 197, 94, 0.30);
+        color: #22c55e;
+    }
+    .topbar-net-sniffer {
+        background: rgba(59, 130, 246, 0.10);
+        border: 1px solid rgba(59, 130, 246, 0.30);
+        color: #3b82f6;
+    }
+    .topbar-net-synth {
+        background: rgba(168, 85, 247, 0.10);
+        border: 1px solid rgba(168, 85, 247, 0.30);
+        color: #a855f7;
+    }
+    .topbar-net-off {
+        background: rgba(148, 163, 184, 0.10);
+        border: 1px solid rgba(148, 163, 184, 0.30);
+        color: var(--text-muted);
+    }
+
+    .page-content { padding: 2rem; flex: 1; }
+</style>
+
+@code {
+    private ErrorBoundary? _boundary;
+    private DateTime _now = DateTime.Now;
+    private System.Threading.Timer? _clock;
+
+    protected override void OnInitialized()
+    {
+        AppState.OnChange += OnExt;
+        Lang.Changed += OnExt;
+        _clock = new System.Threading.Timer(_ =>
+        {
+            _now = DateTime.Now;
+            InvokeAsync(StateHasChanged);
+        }, null, 1000, 1000);
+        _ = EnforceFirstLoginGuardAsync();
+    }
+
+    // Catches admin-issued accounts that bypassed the Login page redirect
+    // (e.g. user reloaded the dashboard with a stale tab open). Sends them
+    // to /first-login until they actually rotate the password.
+    //
+    // Guard is single-shot per session — without _guardChecked, every page
+    // navigation that re-enters MainLayout fires another /api/auth/me, and
+    // when the JWT secret rotated on a container rebuild the stale-token
+    // 401s pile up in the console (see CLAUDE.md "Авторизация").
+    private static bool _guardChecked;
+    private async Task EnforceFirstLoginGuardAsync()
+    {
+        if (_guardChecked) return;
+
+        // Bail before the network round-trip when we already know the
+        // request will fail — no token, or we're on a page that the user
+        // is meant to be on while unauthenticated.
+        var path = Nav.ToBaseRelativePath(Nav.Uri).TrimEnd('/').ToLowerInvariant();
+        if (path.StartsWith("login") || path.StartsWith("first-login")) return;
+        var token = await Auth.GetTokenAsync();
+        if (string.IsNullOrEmpty(token)) return;
+
+        _guardChecked = true;
+        try
+        {
+            using var resp = await Http.GetAsync("api/auth/me");
+            if (!resp.IsSuccessStatusCode) return;
+            var me = await resp.Content.ReadFromJsonAsync<MeResponse>();
+            if (me is { MustChangePassword: true })
+            {
+                Nav.NavigateTo("/first-login", forceLoad: false);
+            }
+        }
+        catch { /* network blip — AuthHttpHandler covers 401s on subsequent calls */ }
+    }
+
+    private sealed class MeResponse
+    {
+        public string Username { get; set; } = "";
+        public string Role { get; set; } = "";
+        public bool MustChangePassword { get; set; }
+    }
+
+    public void Dispose()
+    {
+        AppState.OnChange -= OnExt;
+        Lang.Changed -= OnExt;
+        _clock?.Dispose();
+    }
+
+    private void OnExt() => InvokeAsync(StateHasChanged);
+
+    // Reset the boundary on navigation so a stuck error state doesn't follow
+    // the user to other pages. Also exposed as a manual "retry" button.
+    protected override void OnParametersSet() => _boundary?.Recover();
+
+    private void Recover() => _boundary?.Recover();
+
+    private void GoToAnomalies() => Nav.NavigateTo("anomalies");
+
+    // Pull the port off "http://host:5002" so the topbar can show ":5002"
+    // compactly. Returns "" when the target is malformed or has no port.
+    private static string ExtractPort(string? target)
+    {
+        if (string.IsNullOrWhiteSpace(target)) return string.Empty;
+        if (!Uri.TryCreate(target, UriKind.Absolute, out var uri)) return string.Empty;
+        return uri.IsDefaultPort ? string.Empty : uri.Port.ToString();
+    }
+
+    private string PageTitle()
+    {
+        var path = Nav.ToBaseRelativePath(Nav.Uri).TrimEnd('/').ToLowerInvariant();
+        return path switch
+        {
+            ""           => Lang.T("nav.dashboard"),
+            "devices"    => Lang.T("nav.devices"),
+            "anomalies"  => Lang.T("nav.anomalies"),
+            "insights"   => Lang.T("nav.insights"),
+            "admin"      => Lang.T("nav.admin"),
+            "settings"   => Lang.T("nav.settings"),
+            "profile"    => Lang.T("nav.profile"),
+            _            => "NetVigil"
+        };
+    }
+}

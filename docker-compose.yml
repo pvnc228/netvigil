@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: netvigil-db
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: password123
+      POSTGRES_USER: postgres
+      POSTGRES_DB: netvigil
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d netvigil"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+  server:
+    build:
+      context: .
+      dockerfile: NetVigil.Server/Dockerfile
+    container_name: netvigil-server
+    restart: on-failure
+    ports:
+      - "5000:8080"
+      - "5002:8081"
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=timescaledb;Database=netvigil;Username=postgres;Password=password123
+    volumes:
+      - ./data:/app/data
+
+  client:
+    build:
+      context: .
+      dockerfile: NetVigil.Client/Dockerfile
+    container_name: netvigil-client
+    ports:
+      - "5001:80"
+    depends_on:
+      - server
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: netvigil-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_USERS_DEFAULT_THEME=dark
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+
+volumes:
+  db-data:
+  grafana-data:

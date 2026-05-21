@@ -1,0 +1,298 @@
+@page "/insights"
+@attribute [Authorize]
+@using NetVigil.Shared
+@using NetVigil.Client.Services
+@inject HttpClient Http
+@inject LanguageService Lang
+@implements IDisposable
+
+<PageTitle>NetVigil — @Lang.T("nav.insights")</PageTitle>
+
+<div class="ins-header">
+    <div>
+        <h2 style="margin:0;">@Lang.T("insights.title")</h2>
+        <div style="color:var(--text-secondary); font-size:0.9rem; margin-top:4px;">
+            @Lang.T("insights.subtitle")
+        </div>
+    </div>
+    <div class="updated-pill">
+        @Lang.T("insights.updated"): @(_stats?.SnapshotAt.ToLocalTime().ToString("HH:mm:ss") ?? "—")
+    </div>
+</div>
+
+@if (_stats is null)
+{
+    <div class="card" style="color:var(--text-secondary);">@Lang.T("common.loading")</div>
+}
+else
+{
+    var isIF = _stats.DetectorKind == "isolation-forest";
+    var trainedAge = _stats.LastTrainedAt is null ? null : (TimeSpan?)(DateTime.UtcNow - _stats.LastTrainedAt.Value);
+    var resPct = _stats.ReservoirCapacity > 0
+        ? Math.Min(100.0, 100.0 * _stats.ReservoirFilled / _stats.ReservoirCapacity)
+        : 0;
+
+    <!-- Top stat-cards (mirrors Dashboard look) -->
+    <div class="ins-grid">
+        <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(59,130,246,.15); color:#3b82f6;">⚙</div>
+            <div>
+                <div class="stat-label">@Lang.T("insights.kind")</div>
+                <div class="stat-value">@DetectorLabel(_stats.DetectorKind)</div>
+                <div class="stat-sub">
+                    @if (_stats.IsTrained)
+                    {
+                        <span class="dot-status dot-ok"></span>
+                        <span>@Lang.T("insights.status.ready")</span>
+                    }
+                    else
+                    {
+                        <span class="dot-status dot-warm"></span>
+                        <span>@Lang.T("insights.status.warmup")</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(16,185,129,.15); color:#10b981;">∑</div>
+            <div>
+                <div class="stat-label">@Lang.T("insights.samples")</div>
+                <div class="stat-value">@_stats.SamplesSeen.ToString("N0")</div>
+                <div class="stat-sub">@Lang.T("insights.samples.sub")</div>
+            </div>
+        </div>
+
+        <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(234,179,8,.15); color:#eab308;">⏱</div>
+            <div>
+                <div class="stat-label">@Lang.T("insights.lastTrain")</div>
+                @if (trainedAge is null)
+                {
+                    <div class="stat-value" style="font-size:1.2rem; color:var(--text-secondary);">
+                        @Lang.T("insights.lastTrain.never")
+                    </div>
+                }
+                else
+                {
+                    <div class="stat-value">@HumanizeAge(trainedAge.Value)</div>
+                    <div class="stat-sub">
+                        @_stats.LastTrainDurationMs ms · @Lang.T("insights.lastTrain.every") @_stats.RetrainIntervalSeconds s
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(239,68,68,.15); color:#ef4444;">≈</div>
+            <div>
+                <div class="stat-label">@Lang.T("insights.criticalNow")</div>
+                <div class="stat-value" style="color:@(_stats.DevicesCritical > 0 ? "#ef4444" : "inherit")">
+                    @_stats.DevicesCritical
+                </div>
+                <div class="stat-sub">@Lang.T("insights.criticalNow.sub")</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reservoir progress -->
+    @if (isIF)
+    {
+        <div class="card">
+            <div class="card-head">
+                <h3>@Lang.T("insights.reservoir")</h3>
+                <span class="card-subhead">@_stats.ReservoirFilled.ToString("N0") / @_stats.ReservoirCapacity.ToString("N0")</span>
+            </div>
+            <div class="bar">
+                <div class="bar-fill" style="width:@resPct.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)%;"></div>
+            </div>
+            <div class="card-help">@Lang.T("insights.reservoir.help")</div>
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="card-head">
+                <h3>@Lang.T("insights.window")</h3>
+                <span class="card-subhead">@_stats.ReservoirFilled / @_stats.ReservoirCapacity @Lang.T("insights.window.unit")</span>
+            </div>
+            <div class="card-help">@Lang.T("insights.window.help")</div>
+        </div>
+    }
+
+    <!-- Population distribution -->
+    <div class="card">
+        <div class="card-head">
+            <h3>@Lang.T("insights.population")</h3>
+            <span class="card-subhead">@(_stats.DevicesNormal + _stats.DevicesSuspicious + _stats.DevicesAnomalous + _stats.DevicesCritical) @Lang.T("insights.population.unit")</span>
+        </div>
+        @{
+            var total = Math.Max(1, _stats.DevicesNormal + _stats.DevicesSuspicious + _stats.DevicesAnomalous + _stats.DevicesCritical);
+            double pct(int n) => 100.0 * n / total;
+        }
+        <div class="seg-bar">
+            <div class="seg" style="width:@pct(_stats.DevicesNormal).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)%; background:#10b981;"
+                 title="@Lang.T("severity.normal"): @_stats.DevicesNormal"></div>
+            <div class="seg" style="width:@pct(_stats.DevicesSuspicious).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)%; background:#eab308;"
+                 title="@Lang.T("severity.suspicious"): @_stats.DevicesSuspicious"></div>
+            <div class="seg" style="width:@pct(_stats.DevicesAnomalous).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)%; background:#f97316;"
+                 title="@Lang.T("severity.anomalous"): @_stats.DevicesAnomalous"></div>
+            <div class="seg" style="width:@pct(_stats.DevicesCritical).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)%; background:#ef4444;"
+                 title="@Lang.T("severity.critical"): @_stats.DevicesCritical"></div>
+        </div>
+        <div class="legend">
+            <span><span class="leg-dot" style="background:#10b981"></span>@Lang.T("severity.normal") · @_stats.DevicesNormal</span>
+            <span><span class="leg-dot" style="background:#eab308"></span>@Lang.T("severity.suspicious") · @_stats.DevicesSuspicious</span>
+            <span><span class="leg-dot" style="background:#f97316"></span>@Lang.T("severity.anomalous") · @_stats.DevicesAnomalous</span>
+            <span><span class="leg-dot" style="background:#ef4444"></span>@Lang.T("severity.critical") · @_stats.DevicesCritical</span>
+        </div>
+    </div>
+
+    <!-- Model parameters / thresholds -->
+    <div class="ins-two">
+        <div class="card">
+            <h3>@Lang.T("insights.params")</h3>
+            <dl class="kv">
+                @if (isIF)
+                {
+                    <dt>@Lang.T("insights.params.trees")</dt>
+                    <dd>@_stats.Trees</dd>
+                    <dt>@Lang.T("insights.params.subsample")</dt>
+                    <dd>@_stats.SubSampleSize</dd>
+                    <dt>@Lang.T("insights.params.depth")</dt>
+                    <dd>@_stats.MaxDepth</dd>
+                    <dt>@Lang.T("insights.params.mbpsRange")</dt>
+                    <dd>
+                        @if (_stats.MbpsMin is null || _stats.MbpsMax is null)
+                        {
+                            <span style="color:var(--text-secondary);">—</span>
+                        }
+                        else
+                        {
+                            <span class="mono">[@_stats.MbpsMin.Value.ToString("F2") · @_stats.MbpsMax.Value.ToString("F2")]</span>
+                        }
+                    </dd>
+                }
+                else
+                {
+                    <dt>@Lang.T("insights.params.algo")</dt>
+                    <dd>Rolling Z-Score, w=60</dd>
+                    <dt>@Lang.T("insights.params.warmup")</dt>
+                    <dd>10 @Lang.T("insights.window.unit")</dd>
+                }
+            </dl>
+        </div>
+
+        <div class="card">
+            <h3>@Lang.T("insights.thresholds")</h3>
+            <dl class="kv">
+                <dt><span class="sev-dot" style="background:#eab308"></span>@Lang.T("severity.suspicious")</dt>
+                <dd class="mono">≥ @_stats.SuspiciousThreshold.ToString("F3")</dd>
+                <dt><span class="sev-dot" style="background:#f97316"></span>@Lang.T("severity.anomalous")</dt>
+                <dd class="mono">≥ @_stats.AnomalousThreshold.ToString("F3")</dd>
+                <dt><span class="sev-dot" style="background:#ef4444"></span>@Lang.T("severity.critical")</dt>
+                <dd class="mono">≥ @_stats.CriticalThreshold.ToString("F3")</dd>
+            </dl>
+            <div class="card-help">
+                @(isIF ? Lang.T("insights.thresholds.if") : Lang.T("insights.thresholds.zscore"))
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .ins-header { display:flex; justify-content:space-between; align-items:flex-end;
+                  gap:16px; margin-bottom:24px; flex-wrap:wrap; }
+    .updated-pill { color:var(--text-secondary); font-size:0.85rem;
+                    border:1px solid var(--border-color); padding:6px 12px;
+                    border-radius:9999px; }
+
+    .ins-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; margin-bottom:24px; }
+    @@media(max-width:1100px){ .ins-grid{grid-template-columns:repeat(2,1fr);} }
+    @@media(max-width:600px) { .ins-grid{grid-template-columns:1fr;} }
+
+    .stat-card  { display:flex; align-items:center; gap:16px; }
+    .stat-icon  { width:44px; height:44px; border-radius:10px; display:flex;
+                  align-items:center; justify-content:center; font-size:1.2rem; flex-shrink:0; }
+    .stat-label { color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase;
+                  letter-spacing:.05em; margin-bottom:4px; }
+    .stat-value { font-size:1.5rem; font-weight:700; line-height:1.1; }
+    .stat-sub   { color:var(--text-secondary); font-size:0.75rem; margin-top:6px;
+                  display:flex; align-items:center; gap:6px; }
+
+    .card { margin-bottom:20px; }
+    .card-head { display:flex; justify-content:space-between; align-items:baseline;
+                 margin-bottom:12px; }
+    .card-head h3 { margin:0; font-size:1rem; font-weight:600; }
+    .card-subhead { color:var(--text-secondary); font-size:0.85rem; font-family:monospace; }
+    .card-help { color:var(--text-secondary); font-size:0.8rem; margin-top:10px; }
+
+    .bar { width:100%; height:10px; background:var(--bg-input);
+           border-radius:9999px; overflow:hidden; border:1px solid var(--border-color); }
+    .bar-fill { height:100%;
+                background: linear-gradient(90deg, #10b981, #3b82f6);
+                transition: width .4s ease; }
+
+    .seg-bar { width:100%; height:24px; border-radius:8px; overflow:hidden; display:flex;
+               border:1px solid var(--border-color); background:var(--bg-input); }
+    .seg { height:100%; transition: width .4s ease; }
+    .legend { display:flex; flex-wrap:wrap; gap:14px; margin-top:12px;
+              color:var(--text-secondary); font-size:0.85rem; }
+    .leg-dot, .sev-dot { display:inline-block; width:10px; height:10px;
+                         border-radius:50%; margin-right:6px; vertical-align:middle; }
+
+    .ins-two { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    @@media(max-width:900px){ .ins-two{grid-template-columns:1fr;} }
+
+    .kv { display:grid; grid-template-columns:1fr auto; gap:8px 16px; margin:0; }
+    .kv dt { color:var(--text-secondary); font-size:0.85rem; }
+    .kv dd { margin:0; font-weight:600; }
+    .mono  { font-family:monospace; }
+
+    .dot-status { display:inline-block; width:8px; height:8px; border-radius:50%; }
+    .dot-ok   { background:#10b981; box-shadow:0 0 6px rgba(16,185,129,.6); }
+    .dot-warm { background:#eab308; box-shadow:0 0 6px rgba(234,179,8,.6); }
+</style>
+
+@code {
+    private DetectorStats? _stats;
+    private System.Threading.Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Lang.Changed += OnLangChanged;
+        await LoadAsync();
+        _timer = new System.Threading.Timer(
+            async _ => { await LoadAsync(); await InvokeAsync(StateHasChanged); },
+            null, 5000, 5000);
+    }
+
+    public void Dispose()
+    {
+        Lang.Changed -= OnLangChanged;
+        _timer?.Dispose();
+    }
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task LoadAsync()
+    {
+        try { _stats = await Http.GetFromJsonAsync<DetectorStats>("api/dashboard/detector-stats"); }
+        catch (Exception ex) { Console.WriteLine($"[Insights] {ex.Message}"); }
+    }
+
+    private string DetectorLabel(string kind) => kind switch
+    {
+        "isolation-forest" => "Isolation Forest",
+        "rolling-zscore"   => "Rolling Z-Score",
+        _                  => kind
+    };
+
+    private string HumanizeAge(TimeSpan age)
+    {
+        if (age.TotalSeconds < 60) return $"{(int)age.TotalSeconds}s {Lang.T("insights.ago")}";
+        if (age.TotalMinutes < 60) return $"{(int)age.TotalMinutes}m {Lang.T("insights.ago")}";
+        if (age.TotalHours < 24)   return $"{(int)age.TotalHours}h {Lang.T("insights.ago")}";
+        return $"{(int)age.TotalDays}d {Lang.T("insights.ago")}";
+    }
+}

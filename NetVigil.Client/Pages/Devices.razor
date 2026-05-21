@@ -1,0 +1,227 @@
+@page "/devices"
+@attribute [Authorize]
+@using NetVigil.Shared
+@using NetVigil.Client.Services
+@inject HttpClient Http
+@inject LanguageService Lang
+@implements IDisposable
+
+<PageTitle>NetVigil — @Lang.T("nav.devices")</PageTitle>
+
+<div class="dev-header">
+    <div>
+        <h2 style="margin:0;">@Lang.T("devices.page.title")</h2>
+        <div style="color:var(--text-secondary); font-size:0.9rem; margin-top:4px;">
+            @Lang.T("devices.page.subtitle")
+        </div>
+    </div>
+    <label class="filter-toggle">
+        <input type="checkbox" @bind="_onlyFlagged" />
+        <span>⚑ @Lang.T("anomalies.filter.only_flagged")</span>
+    </label>
+</div>
+
+<div class="card">
+    @if (_loading)
+    {
+        <div class="empty-state">…</div>
+    }
+    else
+    {
+        var rows = SortedFiltered();
+        if (rows.Count == 0)
+        {
+            <div class="empty-state">@Lang.T("devices.empty")</div>
+        }
+        else
+        {
+            <table class="dev-table">
+                <thead>
+                    <tr>
+                        <th class="sortable" @onclick="@(() => SetSort(SortKey.Status))">@Lang.T("devices.col.status") @SortGlyph(SortKey.Status)</th>
+                        <th class="sortable" @onclick="@(() => SetSort(SortKey.Hostname))">@Lang.T("devices.col.name") @SortGlyph(SortKey.Hostname)</th>
+                        <th class="sortable" @onclick="@(() => SetSort(SortKey.Ip))">@Lang.T("devices.col.ip") @SortGlyph(SortKey.Ip)</th>
+                        <th>@Lang.T("devices.col.mac")</th>
+                        <th>@Lang.T("devices.col.vendor")</th>
+                        <th class="sortable" @onclick="@(() => SetSort(SortKey.Risk))">@Lang.T("anomalies.col.severity") @SortGlyph(SortKey.Risk)</th>
+                        <th class="sortable" @onclick="@(() => SetSort(SortKey.Score))">@Lang.T("anomalies.col.score") @SortGlyph(SortKey.Score)</th>
+                        <th class="sortable" @onclick="@(() => SetSort(SortKey.Anom24h))">@Lang.T("devices.col.anom24h") @SortGlyph(SortKey.Anom24h)</th>
+                        <th class="sortable" @onclick="@(() => SetSort(SortKey.Traffic))">Mbps @SortGlyph(SortKey.Traffic)</th>
+                        <th class="sortable" @onclick="@(() => SetSort(SortKey.Seen))">@Lang.T("devices.col.seen") @SortGlyph(SortKey.Seen)</th>
+                        <th>@Lang.T("admin.col.actions")</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var d in rows)
+                    {
+                        <tr>
+                            <td>
+                                <span class="status-badge @(d.IsOnline ? "status-online" : "status-offline")">
+                                    <span class="dot"></span>
+                                    @(d.IsOnline ? Lang.T("devices.online") : Lang.T("devices.offline"))
+                                </span>
+                            </td>
+                            <td class="fw600">
+                                @d.Hostname
+                                @if (d.IsFlagged) { <span class="flag-pill" title="@FlagTooltip(d)">⚑ @Lang.T("devices.flagged")</span> }
+                            </td>
+                            <td class="mono accent-blue">@d.IpAddress</td>
+                            <td class="mono text-secondary">@d.MacAddress</td>
+                            <td class="text-secondary">@d.Vendor</td>
+                            <td><span style="color:@RiskColor(d.RiskLevel); font-weight:600;">@Lang.Severity(d.RiskLevel)</span></td>
+                            <td class="mono">@d.AnomalyScore.ToString("F2")</td>
+                            <td class="mono">@d.AnomalyCount24h</td>
+                            <td>@Format.BandwidthText(d.CurrentTrafficMbps)</td>
+                            <td class="text-secondary mono">@d.LastSeen.ToLocalTime().ToString("HH:mm:ss")</td>
+                            <td>
+                                <button class="btn-flag @(d.IsFlagged ? "on" : "")"
+                                        @onclick="@(() => ToggleFlag(d.MacAddress, !d.IsFlagged))">
+                                    @(d.IsFlagged ? Lang.T("anomalies.unflag") : Lang.T("anomalies.flag"))
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
+</div>
+
+<style>
+    .dev-header {
+        display: flex; justify-content: space-between; align-items: flex-start;
+        gap: 16px; margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .filter-toggle {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 8px 14px; border: 1px solid var(--border-color);
+        border-radius: 8px; cursor: pointer; font-size: 0.9rem;
+        color: var(--text-secondary); background: var(--bg-card); user-select: none;
+    }
+    .filter-toggle:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+    .filter-toggle input[type="checkbox"] { accent-color: #ef4444; transform: scale(1.1); cursor: pointer; }
+
+    .empty-state { padding:36px; text-align:center; color:var(--text-secondary); }
+    .fw600 { font-weight:600; }
+    .mono  { font-family: monospace; }
+    .text-secondary { color: var(--text-secondary); }
+    .accent-blue { color: var(--accent-blue); }
+
+    .dev-table th.sortable { cursor: pointer; user-select: none; }
+    .dev-table th.sortable:hover { color: var(--text-primary); }
+
+    .dot { width:6px; height:6px; border-radius:50%; background:currentColor;
+           display:inline-block; margin-right:5px; }
+    .flag-pill {
+        background: rgba(239,68,68,0.12); color: #ef4444;
+        border: 1px solid rgba(239,68,68,0.4);
+        padding: 1px 6px; border-radius: 9999px; font-size: 0.65rem;
+        font-weight: 600; margin-left: 6px; vertical-align: middle;
+    }
+    .btn-flag {
+        background: transparent; color: var(--text-secondary);
+        border: 1px solid var(--border-color);
+        padding: 4px 10px; border-radius: 6px; cursor: pointer;
+        font-size: 0.8rem; transition: all 0.15s;
+    }
+    .btn-flag:hover { color: #ef4444; border-color: #ef4444; }
+    .btn-flag.on { background: rgba(239,68,68,0.12); color: #ef4444; border-color: rgba(239,68,68,0.4); }
+</style>
+
+@code {
+    private List<NetworkDevice>? _devices;
+    private bool _loading = true;
+    private bool _onlyFlagged;
+    private SortKey _sort = SortKey.Hostname;
+    private bool _desc;
+    private System.Threading.Timer? _timer;
+
+    private enum SortKey { Status, Hostname, Ip, Risk, Score, Anom24h, Traffic, Seen }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Lang.Changed += OnLangChanged;
+        await LoadAsync();
+        _loading = false;
+        _timer = new System.Threading.Timer(
+            async _ => { await LoadAsync(); await InvokeAsync(StateHasChanged); },
+            null, 5000, 5000);
+    }
+
+    public void Dispose()
+    {
+        Lang.Changed -= OnLangChanged;
+        _timer?.Dispose();
+    }
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task LoadAsync()
+    {
+        try { _devices = await Http.GetFromJsonAsync<List<NetworkDevice>>("api/dashboard/devices"); }
+        catch (Exception ex) { Console.WriteLine($"[Devices] {ex.Message}"); }
+    }
+
+    private void SetSort(SortKey key)
+    {
+        if (_sort == key) _desc = !_desc;
+        else { _sort = key; _desc = false; }
+    }
+
+    private string SortGlyph(SortKey key) =>
+        _sort == key ? (_desc ? "▼" : "▲") : "";
+
+    private List<NetworkDevice> SortedFiltered()
+    {
+        if (_devices is null) return new();
+        var src = _onlyFlagged ? _devices.Where(d => d.IsFlagged) : _devices;
+        IOrderedEnumerable<NetworkDevice> ordered = _sort switch
+        {
+            SortKey.Status   => src.OrderBy(d => d.IsOnline ? 0 : 1),
+            SortKey.Hostname => src.OrderBy(d => d.Hostname),
+            SortKey.Ip       => src.OrderBy(d => IpToInt(d.IpAddress)),
+            SortKey.Risk     => src.OrderBy(d => (int)d.RiskLevel),
+            SortKey.Score    => src.OrderBy(d => d.AnomalyScore),
+            SortKey.Anom24h  => src.OrderBy(d => d.AnomalyCount24h),
+            SortKey.Traffic  => src.OrderBy(d => d.CurrentTrafficMbps),
+            SortKey.Seen     => src.OrderBy(d => d.LastSeen),
+            _                => src.OrderBy(d => d.Hostname)
+        };
+        return (_desc ? ordered.Reverse() : ordered).ToList();
+    }
+
+    private static uint IpToInt(string ip)
+    {
+        var parts = ip.Split('.');
+        if (parts.Length != 4) return 0;
+        uint x = 0;
+        foreach (var p in parts) { x = (x << 8) | (byte.TryParse(p, out var b) ? b : (byte)0); }
+        return x;
+    }
+
+    private async Task ToggleFlag(string mac, bool flagged)
+    {
+        try
+        {
+            await Http.PostAsJsonAsync($"api/dashboard/devices/{mac}/flag",
+                new FlagDeviceRequest { IsFlagged = flagged });
+            await LoadAsync();
+        }
+        catch (Exception ex) { Console.WriteLine($"[Devices/flag] {ex.Message}"); }
+    }
+
+    private static string FlagTooltip(NetworkDevice d)
+    {
+        if (d.FlaggedAt is null) return "";
+        var by = string.IsNullOrWhiteSpace(d.FlaggedBy) ? "?" : d.FlaggedBy;
+        return $"{by} · {d.FlaggedAt.Value.ToLocalTime():yyyy-MM-dd HH:mm}";
+    }
+
+    private static string RiskColor(RiskLevel r) => r switch
+    {
+        RiskLevel.Critical   => "#ef4444",
+        RiskLevel.Anomalous  => "#f97316",
+        RiskLevel.Suspicious => "#eab308",
+        _                    => "#10b981"
+    };
+}

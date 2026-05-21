@@ -1,0 +1,56 @@
+name: build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # Cache NuGet so subsequent runs don't repay the restore cost.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore NetVigil.sln
+
+      - name: Build
+        run: dotnet build NetVigil.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test NetVigil.sln --configuration Release --no-build --logger "trx;LogFileName=test-results.trx" --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/**/*.trx
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Verify formatting
+        # `dotnet format --verify-no-changes` exits non-zero on any whitespace
+        # / style drift. Continue-on-error so ongoing churn doesn't block PRs;
+        # remove that line once the codebase is fully clean.
+        run: dotnet format NetVigil.sln --verify-no-changes --no-restore
+        continue-on-error: true

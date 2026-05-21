@@ -1,0 +1,52 @@
+syntax = "proto3";
+option csharp_namespace = "NetVigil.Shared.Protos";
+package networkscan;
+
+import "google/protobuf/timestamp.proto";
+
+service NetworkScanner {
+  rpc ReportDevice (DeviceData) returns (ScanResponse);
+  rpc StreamMetrics (stream MetricSample) returns (StreamResponse);
+  rpc ReportAgentInfo (AgentInfo) returns (ScanResponse);
+}
+
+message AgentInfo {
+  string agent_id = 1;        
+  string hostname = 2;        
+  string interface_name = 3;  
+  string interface_desc = 4;  
+  string local_ip = 5;        
+  string subnet_cidr = 6;     
+  string mode = 7;            
+  string version = 8;         
+  string grpc_target = 9;     
+  google.protobuf.Timestamp started_at = 10;
+}
+
+message DeviceData {
+  string mac_address = 1;
+  string ip_address = 2;
+  string hostname = 3;
+  string vendor = 4;
+  double current_traffic_mbps = 5;
+}
+
+message MetricSample {
+  string mac_address = 1;
+  string ip_address = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  double mbps_in = 4;
+  double mbps_out = 5;
+  uint32 packets_per_sec = 6;
+}
+
+message ScanResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message StreamResponse {
+  bool success = 1;
+  uint32 samples_received = 2;
+  uint32 anomalies_detected = 3;
+}

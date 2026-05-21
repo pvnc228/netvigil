@@ -1,0 +1,80 @@
+@page "/login"
+@layout EmptyLayout
+@using NetVigil.Client.Layout
+@using NetVigil.Client.Services
+@inject AuthService Auth
+@inject LanguageService Lang
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>NetVigil — @Lang.T("login.page")</PageTitle>
+
+<div class="login-bg">
+    <form class="login-card" @onsubmit="OnSubmit" @onsubmit:preventDefault>
+        <div class="login-logo">NET<span>VIGIL</span></div>
+        <h2 style="margin: 4px 0 24px; font-weight: 700;">@Lang.T("login.title")</h2>
+
+        <label class="lbl">@Lang.T("login.username")</label>
+        <input class="inp" type="text" @bind="username" autocomplete="username" />
+
+        <label class="lbl">@Lang.T("login.password")</label>
+        <input class="inp" type="password" @bind="password" autocomplete="current-password" />
+
+        @if (error)
+        {
+            <div class="err">@Lang.T("login.error")</div>
+        }
+
+        <button type="submit" class="btn-primary" style="width:100%; justify-content:center; margin-top: 16px;" disabled="@busy">
+            @if (busy) { <span>…</span> } else { <span>@Lang.T("login.submit")</span> }
+        </button>
+    </form>
+</div>
+
+<style>
+    .login-bg {
+        min-height: 100vh; width: 100vw;
+        display: flex; align-items: center; justify-content: center;
+        background: var(--main-bg);
+    }
+    .login-card {
+        background: var(--bg-card); border: 1px solid var(--border-color);
+        border-radius: 14px; padding: 36px 32px; width: 360px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+        display: flex; flex-direction: column;
+    }
+    .login-logo {
+        font-size: 1.4rem; font-weight: 800; letter-spacing: 1px;
+        color: var(--text-primary);
+    }
+    .login-logo span { color: var(--accent-green); }
+    .lbl { color: var(--text-secondary); font-size: 0.85rem; margin-top: 12px; margin-bottom: 4px; }
+    .inp {
+        background: var(--bg-input); border: 1px solid var(--border-color);
+        color: var(--text-primary); padding: 10px 12px;
+        border-radius: 8px; font-size: 0.95rem;
+    }
+    .inp:focus { outline: none; border-color: var(--accent-green); }
+    .err { color: #ef4444; font-size: 0.85rem; margin-top: 10px; }
+</style>
+
+@code {
+    private string username = "";
+    private string password = "";
+    private bool busy;
+    private bool error;
+
+    protected override void OnInitialized() => Lang.Changed += OnLangChanged;
+    public void Dispose() => Lang.Changed -= OnLangChanged;
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task OnSubmit()
+    {
+        error = false;
+        busy = true;
+        var resp = await Auth.LoginAsync(username, password);
+        busy = false;
+        if (resp is null) { error = true; return; }
+        Nav.NavigateTo(resp.MustChangePassword ? "/first-login" : "/", forceLoad: false);
+    }
+}

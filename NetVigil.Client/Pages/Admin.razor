@@ -1,0 +1,291 @@
+@page "/admin"
+@attribute [Authorize(Roles = "Admin")]
+@using NetVigil.Shared
+@using NetVigil.Client.Services
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject LanguageService Lang
+@implements IDisposable
+
+<PageTitle>NetVigil — @Lang.T("nav.admin")</PageTitle>
+
+<div style="margin-bottom:20px;">
+    <h2 style="margin:0;">@Lang.T("admin.title")</h2>
+    <div style="color:var(--text-secondary); font-size:0.9rem; margin-top:4px;">
+        @Lang.T("admin.subtitle")
+    </div>
+</div>
+
+<!-- Create user -->
+<div class="card" style="margin-bottom:20px;">
+    <h4 style="margin-top:0;">@Lang.T("admin.create")</h4>
+    <div class="grid">
+        <div>
+            <label class="lbl">@Lang.T("admin.new.username")</label>
+            <input class="inp" @bind="_newUsername" autocomplete="off" />
+        </div>
+        <div>
+            <label class="lbl">@Lang.T("admin.new.role")</label>
+            <select class="inp" @bind="_newRole">
+                <option value="Viewer">@Lang.T("admin.role.viewer")</option>
+                <option value="Admin">@Lang.T("admin.role.admin")</option>
+            </select>
+        </div>
+        <div style="align-self:end;">
+            <button class="btn-primary" @onclick="CreateUser" disabled="@_busy">@Lang.T("admin.new.create")</button>
+        </div>
+    </div>
+    <div style="margin-top:10px; color:var(--text-secondary); font-size:0.82rem;">
+        @Lang.T("admin.new.password_hint")
+    </div>
+    @if (_error is not null) { <div style="color:#ef4444; margin-top:12px;">@_error</div> }
+</div>
+
+@if (_generatedFor is not null)
+{
+    <div class="modal-overlay" @onclick="DismissGenerated">
+        <div class="modal-card" @onclick:stopPropagation>
+            <h3 style="margin-top:0;">@Lang.T("admin.gen.title")</h3>
+            <p style="color:var(--text-secondary);">
+                @string.Format(Lang.T("admin.gen.desc"), _generatedFor)
+            </p>
+            <div class="pwd-box">
+                <span class="pwd-text">@_generatedPassword</span>
+                <button class="btn-mini" @onclick="CopyGenerated">@Lang.T("admin.gen.copy")</button>
+            </div>
+            @if (_copied) { <div style="color:var(--accent-green); margin-top:8px;">✓ @Lang.T("admin.gen.copied")</div> }
+            <div style="color:#eab308; font-size:0.8rem; margin-top:14px;">
+                ⚠ @Lang.T("admin.gen.warn")
+            </div>
+            <button class="btn-primary" style="margin-top:18px;" @onclick="DismissGenerated">@Lang.T("admin.gen.done")</button>
+        </div>
+    </div>
+}
+
+<!-- User list -->
+<div class="card">
+    @if (_users is null)
+    {
+        <div class="empty-state">…</div>
+    }
+    else if (_users.Count == 0)
+    {
+        <div class="empty-state">@Lang.T("common.no_users")</div>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr>
+                    <th>@Lang.T("admin.col.id")</th>
+                    <th>@Lang.T("admin.col.username")</th>
+                    <th>@Lang.T("admin.col.role")</th>
+                    <th>@Lang.T("admin.col.created")</th>
+                    <th>@Lang.T("admin.col.last")</th>
+                    <th style="text-align:right;">@Lang.T("admin.col.actions")</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var u in _users)
+                {
+                    <tr>
+                        <td class="mono text-secondary">#@u.Id</td>
+                        <td class="fw600">@u.Username</td>
+                        <td>
+                            <span class="role-badge @(u.Role == UserRole.Admin ? "role-admin" : "role-viewer")">
+                                @(u.Role == UserRole.Admin ? Lang.T("admin.role.admin") : Lang.T("admin.role.viewer"))
+                            </span>
+                        </td>
+                        <td class="text-secondary mono">@u.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")</td>
+                        <td class="text-secondary mono">
+                            @(u.LastLoginAt is null ? Lang.T("admin.never") : u.LastLoginAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))
+                        </td>
+                        <td style="text-align:right; white-space:nowrap;">
+                            @if (u.Role == UserRole.Viewer)
+                            {
+                                <button class="btn-mini" @onclick="@(() => UpdateRole(u, UserRole.Admin))">@Lang.T("admin.promote")</button>
+                            }
+                            else
+                            {
+                                <button class="btn-mini" @onclick="@(() => UpdateRole(u, UserRole.Viewer))">@Lang.T("admin.demote")</button>
+                            }
+                            <button class="btn-mini" @onclick="@(() => ResetPassword(u))">@Lang.T("admin.reset")</button>
+                            <button class="btn-mini btn-danger" @onclick="@(() => DeleteUser(u))">@Lang.T("admin.delete")</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+<style>
+    .grid { display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    @@media(max-width:900px){ .grid { grid-template-columns: 1fr 1fr; } }
+    @@media(max-width:600px){ .grid { grid-template-columns: 1fr; } }
+    .lbl { display:block; color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 4px; }
+    .inp {
+        width: 100%; background: var(--bg-input); border: 1px solid var(--border-color);
+        color: var(--text-primary); padding: 10px 12px; border-radius: 6px;
+        box-sizing: border-box;
+    }
+    .empty-state { padding:36px; text-align:center; color:var(--text-secondary); }
+    .fw600 { font-weight:600; }
+    .mono  { font-family: monospace; }
+    .text-secondary { color: var(--text-secondary); }
+
+    .role-badge {
+        padding: 3px 10px; border-radius: 9999px;
+        font-size: 0.75rem; font-weight: 600;
+    }
+    .role-admin   { background: rgba(59,130,246,0.15); color:#3b82f6; border:1px solid rgba(59,130,246,0.3); }
+    .role-viewer  { background: rgba(148,163,184,0.12); color:var(--text-secondary); border:1px solid var(--border-color); }
+
+    .btn-mini {
+        background: transparent; color: var(--text-secondary);
+        border: 1px solid var(--border-color);
+        padding: 6px 10px; border-radius: 6px; cursor: pointer;
+        font-size: 0.8rem; margin-left: 6px; transition: all 0.15s;
+    }
+    .btn-mini:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+    .btn-mini.btn-danger:hover { color:#ef4444; border-color:#ef4444; }
+
+    .modal-overlay {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 1000;
+    }
+    .modal-card {
+        background: var(--bg-card); border: 1px solid var(--border-color);
+        border-radius: 14px; padding: 28px 28px; width: min(420px, 92vw);
+        box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+    }
+    .pwd-box {
+        display: flex; align-items: center; gap: 10px;
+        background: var(--bg-input); border: 1px solid var(--border-color);
+        border-radius: 8px; padding: 12px 14px; margin-top: 14px;
+    }
+    .pwd-text {
+        flex: 1; font-family: monospace; font-size: 1.05rem;
+        letter-spacing: 1px; user-select: all;
+    }
+</style>
+
+@code {
+    private List<UserSummary>? _users;
+    private string _newUsername = "";
+    private string _newRole = "Viewer";
+    private bool _busy;
+    private string? _error;
+
+    private string? _generatedFor;
+    private string  _generatedPassword = "";
+    private bool    _copied;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Lang.Changed += OnLangChanged;
+        await LoadAsync();
+    }
+
+    public void Dispose() => Lang.Changed -= OnLangChanged;
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task LoadAsync()
+    {
+        try { _users = await Http.GetFromJsonAsync<List<UserSummary>>("api/admin/users"); }
+        catch (Exception ex) { Console.WriteLine($"[Admin] {ex.Message}"); }
+    }
+
+    private async Task CreateUser()
+    {
+        _busy = true; _error = null;
+        try
+        {
+            var role = _newRole == "Admin" ? UserRole.Admin : UserRole.Viewer;
+            var resp = await Http.PostAsJsonAsync("api/admin/users",
+                new CreateUserRequest { Username = _newUsername, Role = role });
+            if (resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadFromJsonAsync<CreateUserResponse>();
+                if (body is not null)
+                {
+                    _generatedFor      = body.User.Username;
+                    _generatedPassword = body.GeneratedPassword;
+                    _copied = false;
+                }
+                _newUsername = ""; _newRole = "Viewer";
+                await LoadAsync();
+            }
+            else
+            {
+                _error = await resp.Content.ReadAsStringAsync();
+            }
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task UpdateRole(UserSummary u, UserRole role)
+    {
+        try
+        {
+            await Http.PatchAsJsonAsync($"api/admin/users/{u.Id}/role",
+                new UpdateUserRoleRequest { Role = role });
+            await LoadAsync();
+        }
+        catch (Exception ex) { Console.WriteLine($"[Admin/role] {ex.Message}"); }
+    }
+
+    private async Task DeleteUser(UserSummary u)
+    {
+        var msg = string.Format(Lang.T("admin.confirm.delete"), u.Username);
+        var ok = await JS.InvokeAsync<bool>("confirm", msg);
+        if (!ok) return;
+        try
+        {
+            await Http.DeleteAsync($"api/admin/users/{u.Id}");
+            await LoadAsync();
+        }
+        catch (Exception ex) { Console.WriteLine($"[Admin/delete] {ex.Message}"); }
+    }
+
+    private async Task ResetPassword(UserSummary u)
+    {
+        var msg = string.Format(Lang.T("admin.confirm.reset"), u.Username);
+        var ok = await JS.InvokeAsync<bool>("confirm", msg);
+        if (!ok) return;
+        try
+        {
+            var resp = await Http.PostAsync($"api/admin/users/{u.Id}/reset-password", null);
+            if (resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadFromJsonAsync<CreateUserResponse>();
+                if (body is not null)
+                {
+                    _generatedFor      = u.Username;
+                    _generatedPassword = body.GeneratedPassword;
+                    _copied = false;
+                }
+                await LoadAsync();
+            }
+        }
+        catch (Exception ex) { Console.WriteLine($"[Admin/reset] {ex.Message}"); }
+    }
+
+    private async Task CopyGenerated()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _generatedPassword);
+            _copied = true;
+        }
+        catch { _copied = false; }
+    }
+
+    private void DismissGenerated()
+    {
+        _generatedFor = null;
+        _generatedPassword = "";
+        _copied = false;
+    }
+}
