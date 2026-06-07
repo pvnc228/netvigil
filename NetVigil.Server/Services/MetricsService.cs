@@ -17,10 +17,6 @@ namespace NetVigil.Server.Services
         private readonly ConcurrentQueue<TrafficSample> _pendingSamples = new();
         private readonly ConcurrentQueue<AnomalyEvent> _pendingAnomalies = new();
 
-        // Set of MAC addresses whose in-memory state changed since the last
-        // flush. FlushAsync iterates this instead of the entire device map,
-        // so a 500-device load test no longer issues 500 UPDATEs every 2s
-        // when most rows haven't changed.
         private readonly ConcurrentDictionary<string, byte> _dirtyMacs = new();
         private void MarkDirty(string mac) => _dirtyMacs[mac] = 0;
 
@@ -79,10 +75,6 @@ namespace NetVigil.Server.Services
             device.FlaggedAt = flagged ? now : null;
             device.FlaggedBy = flagged ? actor : null;
 
-            // Persist immediately + write audit row. Fire-and-forget: the
-            // operator UI calls /flag rarely (manual click), so an extra DB
-            // round-trip per call is fine and avoids losing the audit if the
-            // process is killed before the next FlushAsync tick.
             _ = PersistFlagAsync(device, flagged, actor, reason, now);
             return true;
         }
@@ -117,12 +109,6 @@ namespace NetVigil.Server.Services
             }
         }
 
-        // Synthetic devices come from NetVigil.LoadTest (MAC prefix 02:99:)
-        // and the agent's `--synthetic` mode (hostname pattern "loadtest-*").
-        // After a stress run finishes they sit forever in the device map and
-        // every flush still iterates them — so 1 min after the agent stops
-        // reporting we drop them from memory and the DB. Real devices are
-        // never matched by either rule.
         private static readonly TimeSpan SyntheticPurgeAfter = TimeSpan.FromMinutes(1);
 
         private static bool IsSynthetic(NetworkDevice d) =>
@@ -178,10 +164,6 @@ namespace NetVigil.Server.Services
             }
             return await q.Take(limit).ToListAsync(ct);
         }
-
-        // Mark devices that haven't reported recently as offline. Returns
-        // the number of state transitions, so the caller can log only when
-        // something actually changed.
         public int SweepOffline(TimeSpan staleAfter)
         {
             var cutoff = DateTime.UtcNow - staleAfter;
@@ -253,9 +235,6 @@ namespace NetVigil.Server.Services
         public DetectorStats GetDetectorStats()
         {
             var stats = _detector.GetStats();
-            // Attach a current-population breakdown by current risk level so
-            // the ML page can show "what the model is calling things right now"
-            // alongside the training metadata from the detector itself.
             foreach (var d in _devices.Values)
             {
                 switch (d.RiskLevel)
