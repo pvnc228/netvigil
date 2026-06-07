@@ -66,15 +66,9 @@
                         @AppState.CriticalCount @Lang.T("topbar.critical")
                     </button>
                 }
-                <!-- <span class="topbar-divider"></span>
-                <span class="topbar-clock">@_now.ToString("HH:mm:ss")</span> -->
             </div>
         </header>
 
-        @* ErrorBoundary catches uncaught exceptions in any child page so a
-           bad render in one tab doesn't take down the whole shell. The error
-           UI stays inside <main>, so the sidebar/nav remains usable and the
-           user can navigate to a working page. *@
         <ErrorBoundary @ref="_boundary">
             <ChildContent>
                 <div class="page-content">@Body</div>
@@ -192,22 +186,11 @@
         _ = EnforceFirstLoginGuardAsync();
     }
 
-    // Catches admin-issued accounts that bypassed the Login page redirect
-    // (e.g. user reloaded the dashboard with a stale tab open). Sends them
-    // to /first-login until they actually rotate the password.
-    //
-    // Guard is single-shot per session — without _guardChecked, every page
-    // navigation that re-enters MainLayout fires another /api/auth/me, and
-    // when the JWT secret rotated on a container rebuild the stale-token
-    // 401s pile up in the console (see CLAUDE.md "Авторизация").
     private static bool _guardChecked;
     private async Task EnforceFirstLoginGuardAsync()
     {
         if (_guardChecked) return;
 
-        // Bail before the network round-trip when we already know the
-        // request will fail — no token, or we're on a page that the user
-        // is meant to be on while unauthenticated.
         var path = Nav.ToBaseRelativePath(Nav.Uri).TrimEnd('/').ToLowerInvariant();
         if (path.StartsWith("login") || path.StartsWith("first-login")) return;
         var token = await Auth.GetTokenAsync();
@@ -224,7 +207,7 @@
                 Nav.NavigateTo("/first-login", forceLoad: false);
             }
         }
-        catch { /* network blip — AuthHttpHandler covers 401s on subsequent calls */ }
+        catch { /* network blip - AuthHttpHandler covers 401s on subsequent calls */ }
     }
 
     private sealed class MeResponse
@@ -243,16 +226,12 @@
 
     private void OnExt() => InvokeAsync(StateHasChanged);
 
-    // Reset the boundary on navigation so a stuck error state doesn't follow
-    // the user to other pages. Also exposed as a manual "retry" button.
     protected override void OnParametersSet() => _boundary?.Recover();
 
     private void Recover() => _boundary?.Recover();
 
     private void GoToAnomalies() => Nav.NavigateTo("anomalies");
 
-    // Pull the port off "http://host:5002" so the topbar can show ":5002"
-    // compactly. Returns "" when the target is malformed or has no port.
     private static string ExtractPort(string? target)
     {
         if (string.IsNullOrWhiteSpace(target)) return string.Empty;
