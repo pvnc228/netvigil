@@ -1,24 +1,24 @@
 # NetVigil
 
-Веб-приложение для мониторинга локальной сети: автоматический discovery устройств, real-time учёт трафика, ML-детекция аномалий, оператор-флаги, Telegram-уведомления.
+Веб-приложение для мониторинга локальной сети.
 
 ## Стек
 
-- **.NET 8** — Server (ASP.NET Core), Agent (Generic Host), Client (Blazor WebAssembly)
-- **gRPC** — канал Agent → Server (HTTP/2 plaintext)
-- **EF Core** — SQLite (dev) / TimescaleDB-Postgres (prod)
-- **Isolation Forest** (custom impl) + Rolling Z-Score — детекторы аномалий
-- **Telegram.Bot** — нотификации
-- **SharpPcap / Npcap / libpcap** — опциональный per-MAC packet capture
-- **JWT + PBKDF2-SHA256** — аутентификация
-- **nginx** — reverse-proxy для клиента в docker
+- **.NET 8** - Server, Agent, Client
+- **gRPC** - канал Agent → Server
+- **EF Core** - TimescaleDB-Postgres 
+- **Isolation Forest** - детектор аномалий
+- **Telegram.Bot** - уведомления
+- **SharpPcap / Npcap / libpcap** - опциональный per-MAC packet capture
+- **JWT + PBKDF2-SHA256** - аутентификация
+- **nginx** - reverse-proxy в docker
 
 ## Режимы агента
 
 `appsettings.json` → `Agent:Mode`:
 
-- **`ArpScan`** (default) — discovery через ICMP-ping /24 + ARP-кэш + NBNS/mDNS, метрики только для self-host;
-- **`GatewaySniffer`** — то же + per-MAC traffic accounting через packet capture. Требует **Npcap** (Windows) или libpcap + `cap_net_raw` (Linux). Имеет смысл только когда хост — гейтвей сети (Windows ICS, Linux hotspot, OpenWrt).
+- **`ArpScan`** (default) - discovery через ICMP-ping /24 + ARP-кэш + NBNS/mDNS, метрики только для self-host;
+- **`GatewaySniffer`** — то же + per-MAC traffic accounting через packet capture. Требует **Npcap** (Windows) или libpcap + `cap_net_raw` (Linux). Имеет смысл только когда хост - гейтвей сети (Windows ICS, Linux hotspot, OpenWrt).
 
 ## Конфигурация
 
@@ -34,6 +34,10 @@
 | `Anomaly:ModelPath` | JSON-снэпшот леса (default `/app/data/anomaly-model.json`) |
 | `DataProtection:KeyPath` | Keyring для шифрования Telegram-токена |
 | `Cors:AllowedOrigins[]` | Пустой → fallback на dev-origins |
+
+## Развертывание
+- docker-compose up --build -d - поднятие основных модулей системы
+- dotnet run --project NetVigil.Agent - запуск агента скнаирования подсети
 
 ## NetVigil.LoadTest (вспомогательный)
 
