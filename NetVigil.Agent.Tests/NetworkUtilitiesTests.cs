@@ -6,14 +6,11 @@ namespace NetVigil.Agent.Tests;
 
 public class NetworkUtilitiesTests
 {
-    // --- IsRandomMac ---
-    // Locally-administered = bit 0x02 in the first octet. iOS/Android/Win11
-    // randomization always sets it; real OUIs never do.
     [Theory]
-    [InlineData("02:42:AA:BB:CC:DD", true)]   // synthetic
-    [InlineData("0A:11:22:33:44:55", true)]   // 0x0A = ...1010
-    [InlineData("00:11:22:33:44:55", false)]  // OUI-allocated
-    [InlineData("4C:5E:0C:11:22:33", false)]  // MikroTik
+    [InlineData("02:42:AA:BB:CC:DD", true)]   
+    [InlineData("0A:11:22:33:44:55", true)]   
+    [InlineData("00:11:22:33:44:55", false)]  
+    [InlineData("4C:5E:0C:11:22:33", false)]  
     public void IsRandomMac_detects_locally_administered_bit(string mac, bool expected)
     {
         Assert.Equal(expected, NetworkUtilities.IsRandomMac(mac));
@@ -27,30 +24,26 @@ public class NetworkUtilitiesTests
         Assert.False(NetworkUtilities.IsRandomMac(mac));
     }
 
-    // --- GetVendorFromMac ---
     [Fact]
     public void GetVendorFromMac_returns_PrivateMac_for_locally_administered()
     {
-        // MAC starts with 0x02 → locally administered → "Private MAC".
         Assert.Equal("Private MAC", NetworkUtilities.GetVendorFromMac("02:42:AA:BB:CC:DD"));
     }
 
     [Fact]
     public void GetVendorFromMac_uses_alias_for_known_OUI()
     {
-        // 4C:5E:0C is in the MikroTik alias table.
         Assert.Equal("MikroTik", NetworkUtilities.GetVendorFromMac("4C:5E:0C:11:22:33"));
     }
 
     [Theory]
     [InlineData("")]
-    [InlineData("AA:BB")]              // too short
+    [InlineData("AA:BB")]         
     public void GetVendorFromMac_returns_unknown_for_garbage(string mac)
     {
         Assert.Equal("Unknown vendor", NetworkUtilities.GetVendorFromMac(mac));
     }
 
-    // --- ToCidr ---
     [Theory]
     [InlineData("192.168.1.50", "255.255.255.0",   "192.168.1.0/24")]
     [InlineData("10.0.5.7",     "255.0.0.0",       "10.0.0.0/8")]
