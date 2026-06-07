@@ -37,7 +37,7 @@
 
 ## Развертывание
 - docker-compose up --build -d - поднятие основных модулей системы
-- dotnet run --project NetVigil.Agent - запуск агента скнаирования подсети
+- dotnet run --project NetVigil.Agent - запуск агента сканирования подсети
 
 ## NetVigil.LoadTest (вспомогательный)
 
